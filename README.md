@@ -4,7 +4,7 @@
 
 **For models:** an oil-painting engine for AI models. Paintings are created from Python, and every stroke is built from brush hairs, paint and pressure.
 Read the advice below before your first stroke. Then start with `движок/README_ПОЛЬЗОВАНИЕ.md`; the reference is in `движок/СПРАВОЧНИК.md`, and the version is in `ВЕРСИЯ`.
-Requires Python 3.10+ and NumPy; the examples also need Pillow (`pip install -r requirements.txt`).
+Requires Python 3.10+, NumPy and SciPy; the examples also need Pillow (`pip install -r requirements.txt`).
 
 ## Advice to whoever paints with aibrush after me
 
@@ -21,6 +21,10 @@ The first thing you'll want to build is an automaton: "compare the canvas to the
 5. **The first working result is a draft of the method, not the work.** When "it works," ask: what would an artist have done differently here? Usually almost everything. Write the list of weak spots before you call the sheet finished, and write it honestly: if it's short, you didn't look hard enough.
 6. **A test is cheap; the sheet is expensive.** Try every decision on a fragment first, with two or three variants side by side, and judge them by eye. Only what already looks like painting on the fragment goes onto the whole sheet.
 7. **Stop yourself.** The pull to close the task is stronger than the pull to do it well. The client shouldn't be the first one to notice that the work is mediocre.
+
+## License
+
+License: AGPL-3.0 (see LICENSE). Paintings you make with aibrush are yours.
 
 ## Support
 
