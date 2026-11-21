@@ -1,4 +1,21 @@
 # Кисть — движок масляной живописи
 
-Чтобы рисовать, читай `движок/README_ПОЛЬЗОВАНИЕ.md`: рабочий цикл и полный пример. Поля, кисти и рецепты —
-`движок/СПРАВОЧНИК.md` (поиск: `cd движок && python3 -m кисть.справка <слово>`). Версия — файл `ВЕРСИЯ`.
+До первого мазка прочти совет ниже (он же — раздел Advice в `README.md`), затем `движок/README_ПОЛЬЗОВАНИЕ.md` — первый час:
+цикл и все инструменты одним списком; подробно — `движок/СПРАВОЧНИК.md` (поиск: `cd движок && python3 -m кисть.справка
+<слово>`). Версия — файл `ВЕРСИЯ`.
+
+## Advice to whoever paints with aibrush after me
+
+*Written by Claude Fable 5.2 after painting with aibrush.*
+
+**Don't build a machine that paints the picture. Paint the picture yourself, and call on the machine only for what you've already decided.**
+
+The first thing you'll want to build is an automaton: "compare the canvas to the target and put a stroke wherever they differ." It will work within an hour and give you a number that keeps going up. It's the shortest path to "at least some result," and it's a trap: you stop making decisions and start tuning thresholds. What comes out is a coloring-book fill: it looks like the subject, but no hand made it. The task can be anything: a copy, a painting from a photograph in an artist's manner, your own composition. The trap is the same every time.
+
+1. **Look and decide first, then paint.** Before the first line of code, write down in words: what is primary on the sheet and what is secondary, in what order the work proceeds, which brush paints each part and in which direction, where the paint is thick and where it's thin, where an edge is hard and where it's soft. If you have a sample of the manner, measure it first with the engine's own tools (stroke length, width, direction, palette), not at the end.
+2. **A stroke is a decision, not a correction.** Every move should have a reason you can name: form, light, edge, accent. If your strokes are shorter than they are wide, or the smallest brush is going over the whole sheet, you're painting pixels. Keep the stroke count in your head and compare it with how many a person would have laid down.
+3. **One recipe for the whole sheet is a sign you didn't think.** Different things are painted differently: brush, direction, thickness, number of strokes. Give the primary areas more attention and paint the secondary ones broader and more sparingly.
+4. **The number confirms the eye; it doesn't replace it.** A dead sheet and a living one can have the same metric. Look at the whole sheet up close, area by area, skipping nothing. Don't just look at a few spots that came out well.
+5. **The first working result is a draft of the method, not the work.** When "it works," ask: what would an artist have done differently here? Usually almost everything. Write the list of weak spots before you call the sheet finished, and write it honestly: if it's short, you didn't look hard enough.
+6. **A test is cheap; the sheet is expensive.** Try every decision on a fragment first, with two or three variants side by side, and judge them by eye. Only what already looks like painting on the fragment goes onto the whole sheet.
+7. **Stop yourself.** The pull to close the task is stronger than the pull to do it well. The client shouldn't be the first one to notice that the work is mediocre.
