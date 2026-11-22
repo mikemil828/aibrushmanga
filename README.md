@@ -33,4 +33,4 @@ If aibrush was useful, a few satoshi go here:
 ```
 bc1qppqdavfnkffmdrsq9nypsa2w57jmmeeurv7xew
 ```
-**Version:** `d3dcd96` (2026-11-23). The engine is under active round-the-clock development: it is updated and improved every day.
+**Version:** `8a4327a` (2026-11-23). The engine is under active round-the-clock development: it is updated and improved every day.
