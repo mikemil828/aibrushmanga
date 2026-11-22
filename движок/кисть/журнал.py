@@ -128,6 +128,7 @@ class Журнал:
         self.пауза = 0
         self.кисти = {}          # id(кисть) -> [кисть, имя, поля, остаток по журналу, краска по журналу]
         self.номер = 0           # последняя выданная кисть «кN»
+        self.строк = 0           # К-3: строк в файле — номер последней (мазок помнит по нему свою рамку, `Холст.править`)
         self.этап = self.объект = None
         if продолжить is None:
             self._ф = open(self.путь, 'wb')
@@ -152,22 +153,23 @@ class Журнал:
         имя = os.path.basename(os.fspath(npz))
         место, первая = None, None
         with open(self.путь, 'rb') as f:
-            байт = 0
+            байт = строк = 0
             for сырая in f:
                 байт += len(сырая)
+                строк += 1
                 if первая is None:
                     первая = json.loads(сырая)
                 if b'"saved"' in сырая:
                     з = json.loads(сырая)
                     if з.get('saved') == имя and з.get('counter') == счётчик:
-                        место = (байт, з)
+                        место = (байт, з, строк)
         if (первая or {}).get('physics') != ФИЗИКА:
             raise ValueError(f'журнал {self.путь}: физика {(первая or {}).get("physics")}, у движка {ФИЗИКА} — '
                              'продолжать этот лист этим движком нельзя')
         if место is None:
             raise ValueError(f'журнал {self.путь}: нет строки {{"saved": "{имя}"}} со счётчиком {счётчик} — '
                              'холст сохранён не с этим журналом или журнал обрезан раньше')
-        байт, з = место
+        байт, з, self.строк = место
         self._сберечь_хвост(байт, имя)
         self._ф = open(self.путь, 'r+b')
         self._ф.truncate(байт)
@@ -200,6 +202,7 @@ class Журнал:
     def строка(self, д):
         self._ф.write(json.dumps(д, ensure_ascii=False, separators=(', ', ': ')).encode('utf-8') + b'\n')
         self._ф.flush()
+        self.строк += 1
 
     def _намерение(self, д, этап=None, объект=None, намерение=None):
         э = self.этап if этап is None else этап
@@ -289,10 +292,10 @@ class Журнал:
     def место(self):
         """Где журнал сейчас: для снимка холста."""
         return (self._ф.tell(), self.номер, self.этап, self.объект,
-                {к: list(з) for к, з in self.кисти.items()})
+                {к: list(з) for к, з in self.кисти.items()}, self.строк)
 
     def откатить(self, место):
-        байт, self.номер, self.этап, self.объект, кисти = место
+        байт, self.номер, self.этап, self.объект, кисти, self.строк = место
         self._ф.truncate(байт)
         self._ф.seek(байт)
         self._ф.flush()
