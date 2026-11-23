@@ -96,7 +96,7 @@ from .журнал import ФИЗИКА, разница_физики
 # заголовка "physics" (записан до встроенного журнала) — предупреждение, поле пропускается, как раньше.
 ПОЛЯ_ХОЛСТА = {'canvas', 'ground', 'px_per_mm', 'grain', 'physics', 'seed', 'seeds'}
 ПОЛЯ_НАМЕРЕНИЯ = {'stage', 'object', 'intent'}
-ПОЛЯ_МАЗКА = {'layer', 'size', 'color', 'colors', 'ctrl', 'points', 'core', 'opacity', 'layout', 'load', 'wipe', 'end',
+ПОЛЯ_МАЗКА = {'lines', 'layer', 'size', 'color', 'colors', 'ctrl', 'points', 'core', 'opacity', 'layout', 'load', 'wipe', 'end',
               'mix_below', 'level', 'ridges', 'reserve', 'touch', 'seed', 'preset', 'paint', 'pressure', 'dry', 'set',
               'pressure_along', 'tool', 'fibers', 'load_along', 'entry', 'angle', 'rotation_along', 'tilt_along',
               'azimuth_along', 'brush_tone', 'stripe', 'stripe_len', 'brush', 'hand', 'path_seed', 'path_rng', 'medium',
