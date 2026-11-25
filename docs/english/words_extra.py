@@ -187,7 +187,7 @@ WORDS = {
     'набора': 'charge', 'сохранён': 'saved', 'сложить': 'add_up', 'подаёт': 'feeds', 'висит': 'hangs',
     'изгиб': 'bend', 'липко': 'tacky', 'подбор': 'pickup', 'разбавителя': 'thinner',
     # second batch
-    'взять': 'take', 'снимок': 'snapshot', 'заметка': 'note', 'кисть': 'brush',
+    'цикл': 'cycle', 'пользование': 'usage', 'взять': 'take', 'снимок': 'snapshot', 'заметка': 'note', 'кисть': 'brush',
     'справка': 'help', 'справки': 'help', 'словарь': 'dictionary', 'срастание': 'growing_together',
     'задним': 'retroactive', 'подсказок': 'hints',
     'мм': 'mm',
