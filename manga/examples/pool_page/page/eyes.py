@@ -19,3 +19,23 @@ paper = MOUTH & (d < 0.22)          # the eyes themselves are drawn by hand (eye
 mat[paper & (mat > 0)] = 5
 np.save('mat.npy', mat)
 np.save('blush.npy', np.array([[383, 400, 450, 428], [527, 410, 603, 435]]))
+# thin slivers of the scene caught in the figure mask (an umbrella rib across the raised hand): a body part
+# is never thinner than ~8 px here, so open the non-hair figure and drop what the opening takes off
+from scipy import ndimage as _nd
+body = (mat > 0) & (mat != 4)
+opened = _nd.binary_opening(body, structure=np.ones((3, 3)), iterations=3)
+sliver = body & ~opened
+lab, n = _nd.label(sliver)
+if n:
+    # only slivers that stick out (touch the outside), not thin bits between two body parts
+    outside = _nd.binary_dilation(mat == 0, iterations=1)
+    touch = _nd.maximum(outside, lab, np.arange(1, n + 1))
+    size = _nd.sum(sliver, lab, np.arange(1, n + 1))
+    drop = np.concatenate([[False], touch.astype(bool) & (size >= 25)])[lab]
+    # only on the side where the scene's umbrella and bushes meet her (raised arm, hand, tail); the ahoge,
+    # the hair's edge and the other arm are thin on purpose
+    zone = np.zeros_like(drop); zone[:1100, 730:] = True
+    drop &= zone
+    mat[drop] = 0
+    np.save('sliver.npy', drop)
+np.save('mat.npy', mat)

@@ -19,6 +19,7 @@ SKIN, SUIT, SCALES, HAIR, PAPER, IRIS = 1, 2, 3, 4, 5, 6
 BLUSH = np.load('./blush.npy')
 LPI = 60
 SRCBOX = [None]
+LAST_BLEED = [0]
 
 
 def source(box, crop):
@@ -80,6 +81,20 @@ def draw_figure(sh, box, crop, opt=None):
     # lines of the figure, at the panel's own scale
     lines = prep.xdog_lines(rgb, sigma=0.9 * s, p=24, eps=-0.015, phi=80, tidy=int(12 * s * s)) > 0.5
     lines &= nd.binary_dilation(fig, iterations=max(2, int(2 * s)))
+    # background lines that run into the figure (umbrella ribs, pool edges) stop at its outline: a line piece
+    # inside the figure is kept only if its traced line lies mostly inside the figure
+    full_lines = prep.xdog_lines(rgb, sigma=0.9 * s, p=24, eps=-0.015, phi=80, tidy=int(12 * s * s)) > 0.5
+    core = nd.binary_erosion(fig, iterations=max(2, int(2 * s)))
+    lab, nl = nd.label(full_lines, structure=np.ones((3, 3)))
+    if nl:
+        inside = nd.mean(core, lab, np.arange(1, nl + 1))
+        size = nd.sum(full_lines, lab, np.arange(1, nl + 1))
+        out_px = size * (1 - inside)
+        bad = (inside < 0.5) & (out_px > 30 * s)            # most of the line is out in the scene
+        bled = np.concatenate([[False], bad])[lab]
+        LAST_BLEED[0] = int((lines & bled & core).sum())
+        lines &= ~bled | ~core
+        lines &= ~(bled & nd.binary_dilation(core, iterations=1))
     lines &= ~eyez
     hair = hair & ~eyez
     mat = np.where((mat == HAIR) & eyez, SKIN, mat)      # round the hand-drawn eyes: skin, not a hole
