@@ -308,6 +308,49 @@ def seedlings_mask():
     return sdm | k3[lab3]
 
 
+REFL_ZONE = (XX < 560) & (YY > 745) & (YY < 905)
+
+
+def reflections(sh):
+    """The pine and the farmhouse mirrored in the paddy in front of them: the same shapes upside down,
+    foreshortened, in a darker line tone, cut through by thin horizontal ripples."""
+    src = nd.binary_fill_holes(nd.binary_closing(Z['pine'], iterations=2))
+    trunk = np.zeros_like(src)
+    for x, y in TRUNK:
+        trunk[max(0, int(y) - 12):int(y) + 12, int(x) - 3:int(x) + 4] = True
+    hs = HOUSES[0]
+    (rx0, rx1, ry), (ex0, ex1, ey) = hs['ridge'], hs['eave']
+    im = Image.new('L', (RW, RH), 0)
+    ImageDraw.Draw(im).polygon([(rx0, ry), (rx1, ry), (ex1, ey), (ex0, ey)], fill=1)
+    ImageDraw.Draw(im).rectangle([ex0 + 10, ey, ex1 - 10, hs['wall']], fill=1)
+    src = src | trunk | np.asarray(im, bool)
+    # mirror: y' = 760 + (686 - y) * 0.48
+    out = np.zeros_like(src)
+    ys = np.arange(745, 905)
+    sy = np.round(686 - (ys - 760) / 0.48).astype(int)
+    ok = (sy >= 0) & (sy < RH)
+    out[ys[ok]] = src[sy[ok]]
+    w = Z['water'] & REFL_ZONE
+    out &= w
+    out = nd.gaussian_filter(out.astype(np.float32), (0.6, 1.2)) > 0.5
+    lay(sh, out, np.full(L.shape, 0.62), kind='line', angle=90.0)
+    # ripples: broken white lines across the reflection, closer together toward the viewer
+    rng = np.random.default_rng(77)
+    y = 762.0
+    k = 0
+    while y < 900:
+        xs = np.nonzero(out[int(y)])[0]
+        if len(xs):
+            x = xs.min()
+            while x < xs.max():
+                ln = rng.uniform(6, 22)
+                sh.stroke([P(x, y), P(x + ln, y)], pen='white', mode='white', pressure=0.08, taper=(0.5, 0.5),
+                          seed=9000 + k)
+                k += 1
+                x += ln + rng.uniform(10, 26)
+        y += rng.uniform(8, 12) - 3 * (y - 760) / 140
+
+
 def paddies(sh, sd):
     w = Z['water'] | Z['shadow'] | sd
     # the water under each tuft takes the water around it (normalized blur over water pixels only)
@@ -317,12 +360,20 @@ def paddies(sh, sd):
     Lw = np.where(sdd, Lw, L)
     # calm water: smooth the reflected light hard (the seedling rows must not print into it)
     lv = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, (2.5, 6.0))), 0, 0.5)
+    # far paddies: smooth hard along the rows, so the strips read as calm bands, not patches
+    lvf = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, (1.5, 16.0))), 0, 0.5)
+    wf = np.clip((830 - YY) / 60, 0, 1)
+    lv = lvf * wf + lv * (1 - wf)
+    # the left village's reflections are drawn separately (reflections()); here the water is calm under them
+    rz = REFL_ZONE & w
+    calm = np.clip(0.06 + 0.10 * (YY - 745) / 160, 0.06, 0.16)     # bright evening water, a little darker near
+    lv = np.where(rz, calm, lv)
     lv[lv < 0.04] = 0
     core = nd.gaussian_filter(Z['shadow'].astype(np.float32), 3.0)
     lv = np.maximum(lv, np.clip(core * 1.5, 0, 1) * 0.74)
     lay(sh, w, lv, kind='line', angle=90.0)          # angle 90 = horizontal lines
     glint = (nd.gaussian_filter(Lw, (2.0, 6.0)) > 0.88) & w & ~sdd
-    glint = nd.binary_opening(glint, iterations=3)
+    glint = nd.binary_opening(glint, iterations=3) & ~REFL_ZONE
     sh.fill(upm(glint), mode='white')
     # bright water: a few hand ripple lines so it still reads as water
     rng = np.random.default_rng(12)
@@ -605,6 +656,7 @@ if __name__ == '__main__':
         village(sh); print('village', round(time.time() - t0))
         sd = seedlings_mask()
         paddies(sh, sd); print('paddies', round(time.time() - t0))
+        reflections(sh)
         path(sh)
         nb = banks(sh, sd); print('banks', nb, round(time.time() - t0))
         ns = seedlings(sh, sd); print('seedlings', ns, round(time.time() - t0))
