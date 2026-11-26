@@ -87,15 +87,29 @@ mat[465:610, 668:810][mat[465:610, 668:810] == 3] = 0
 _ft = Image.new('L', (W, H), 0)
 ImageDraw.Draw(_ft).polygon([(457, 241), (448.5, 251), (412, 294), (412, 300), (465, 300), (459.5, 250)], fill=1)
 mat[np.asarray(_ft, bool) & (mat == 4)] = 1
-# the gap between her left arm and her waist is the pool behind her, not body
+# the gap between her left arm and her waist, below the little dash where her side turns, is the pool
+# behind her, not body (above the dash it is her side)
 _gp = Image.new('L', (W, H), 0)
-ImageDraw.Draw(_gp).polygon([(354, 1005), (356, 1040), (357, 1080), (356, 1120), (354, 1160), (355, 1185),
-                             (359, 1185), (362, 1170), (365, 1145), (369, 1115), (375, 1085), (377, 1060),
-                             (372, 1030), (362, 1005)], fill=1)
+ImageDraw.Draw(_gp).polygon([(356.5, 1094), (356, 1120), (354, 1160), (355, 1185),
+                             (359, 1185), (362, 1170), (365, 1145), (369, 1115), (373, 1094)], fill=1)
 mat[np.asarray(_gp, bool)] = 0
 # the sky seen between her raised upper arm and her shoulder was read as scales
 _ap = Image.new('L', (W, H), 0)
 ImageDraw.Draw(_ap).polygon([(660, 560), (805, 540), (820, 575), (840, 615), (860, 655), (876, 696), (860, 698),
                              (800, 652), (730, 611), (660, 611)], fill=1)
 mat[np.asarray(_ap, bool) & (mat == 3)] = 0
+# the thin wedge of sky between her raised upper arm and forearm was read as scales
+_sk = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_sk).polygon([(814.8, 563.4), (844.2, 590.1), (876.4, 654.3), (889.7, 698.2), (865.6, 686.4), (841.6, 638.2), (820.2, 590.1)], fill=1)
+mat[np.asarray(_sk, bool) & (mat == 3)] = 0
+# the pale rim of the scale on her right thigh is scale too: with it left out, the scale got a second outline
+_rm = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_rm).polygon([(819.0, 1556.1), (851.1, 1515.5), (854.8, 1525.1), (844.1, 1573.2), (824.9, 1613.9), (813.6, 1620.3)], fill=1)
+mat[np.asarray(_rm, bool) & (mat == 0)] = 3
+# the bottom of that gap, down to where her thighs meet, was read as swimsuit
+_gb = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_gb).polygon([(354, 1178), (361, 1178), (363, 1190), (353, 1207), (341, 1208), (349, 1195)], fill=1)
+mat[np.asarray(_gb, bool) & (mat == 2)] = 0
+# the thin line rising behind her ahoge is the umbrella's edge, not skin
+mat[0:104, 470:505][mat[0:104, 470:505] == 1] = 0
 np.save('mat.npy', mat)

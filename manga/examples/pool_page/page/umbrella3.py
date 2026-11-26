@@ -17,6 +17,8 @@ RIBS = [((1025, 0), (695, 263), 3.4, 2.6),      # long rib down to the tip by he
         ((940, 400), (930, 440), 2.6, 2.6)]
 RIM = []
 POLE = [(1055, 165), (975, 620)]
+# the canopy's far edge, a thin line dropping behind her ahoge to her hair
+EDGE = [(470.3, -4), (476, 14), (483.6, 32), (486.3, 64), (489, 101)]
 
 
 def draw_umbrella(sh, to_page, s):
@@ -37,6 +39,8 @@ def draw_umbrella(sh, to_page, s):
     if len(RIM) > 1:
         rim = geom.catmull(P(RIM), per=10)
         sh.stroke(np.column_stack([rim, np.full(len(rim), 0.65)]), pen='g_pen', taper=(0.5, 0))
+    e = geom.catmull(P(EDGE), per=8)
+    sh.stroke(np.column_stack([e, np.full(len(e), 0.45)]), pen='maru', taper=(0, 0.4))
     # pole: a dark tube with a light edge on the left
     a, b = np.array(to_page(*POLE[0])), np.array(to_page(*POLE[1]))
     d = (b - a) / np.hypot(*(b - a)); n = np.array([-d[1], d[0]])
