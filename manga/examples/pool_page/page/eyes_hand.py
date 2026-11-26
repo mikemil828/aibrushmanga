@@ -58,10 +58,15 @@ LIGHTS = [(-0.44, -0.18, 0.26, 0.18), (0.18, -0.28, 0.10, 0.10)]
 GLINT = (0.38, 0.42, 0.065)
 
 
+# the scale-shaped diamonds on the swimsuit's chest: left out of the drawing on Michael's request (2026-11-25)
+SUIT_PLAIN = [(430, 612), (512, 612), (512, 742), (430, 742)]
+
+
 def eye_region(W, H, pad=0):
     """Where the hand-drawn eyes go (ref px): traced lines and hair are kept out of it."""
     im = Image.new('L', (W, H), 0)
     dr = ImageDraw.Draw(im)
+    dr.polygon(SUIT_PLAIN, fill=1)
     for c in CHEEKS:
         dr.polygon(c, fill=1)
         if pad:

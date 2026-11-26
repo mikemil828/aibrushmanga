@@ -39,3 +39,12 @@ if n:
     mat[drop] = 0
     np.save('sliver.npy', drop)
 np.save('mat.npy', mat)
+
+# the swimsuit's chest diamonds become plain swimsuit
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "..", ".."))
+import eyes_hand as _eh
+_sp = Image.new('L', (W, H), 0); ImageDraw.Draw(_sp).polygon(_eh.SUIT_PLAIN, fill=1)
+_sp = np.asarray(_sp, bool) & (mat > 0)
+mat[_sp & (mat != 4)] = 2
+np.save('mat.npy', mat)

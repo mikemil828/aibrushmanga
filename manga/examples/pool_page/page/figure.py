@@ -78,6 +78,12 @@ def draw_figure(sh, box, crop, opt=None):
     fig = mat > 0
     eyez = np.asarray(Image.fromarray(EYEZONE).resize((X1 - X0, Y1 - Y0), Image.NEAREST, box=SRCBOX[0]))
     hair = mat == HAIR
+    # inside the hand-drawn zones (eyes, plain swimsuit) the reference's shading is not ours: take the shade
+    # from just outside, so no cel-shadow edge traces the shapes we left out
+    _ei = nd.distance_transform_edt(eyez, return_distances=False, return_indices=True)
+    ds = ds[tuple(_ei)]
+    # fabric shading reads as broad soft shapes, never as the outline of something printed on it
+    ds = np.where(mat == SUIT, nd.gaussian_filter(ds, 7 * s), ds)
     # lines of the figure, at the panel's own scale
     lines = prep.xdog_lines(rgb, sigma=0.9 * s, p=24, eps=-0.015, phi=80, tidy=int(12 * s * s)) > 0.5
     lines &= nd.binary_dilation(fig, iterations=max(2, int(2 * s)))
