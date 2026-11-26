@@ -62,46 +62,61 @@ def draw_panel1(sh, box, to_page, s, W, H):
             out.append(tuple(p + v / np.hypot(*v) * d))
         return out
 
-    for back, seat, legs, shadow in [
-        ([(-48, 945), (12, 940), (46, 1006), (-14, 1008)], (-60, 100, 1004, 1016),
-         [[(-8, 1016), (12, 1058), (34, 1016)], [(58, 1016), (75, 1050), (92, 1016)]],
-         [(-60, 1052), (96, 1040), (104, 1060), (-60, 1070)]),
-        ([(122, 943), (205, 942), (234, 1022), (141, 1024)], (108, 270, 1020, 1032),
-         [[(112, 1032), (122, 1064), (140, 1032)], [(188, 1032), (205, 1064), (222, 1032)],
-          [(240, 1030), (256, 1058), (268, 1030)]],
-         [(100, 1058), (270, 1052), (278, 1070), (108, 1075)]),
-    ]:
-        tone(sh, m(P(shadow)), level=0.40, lpi=60)
-        # legs first (behind the seat)
-        for lg in legs:
-            tube(lg, 0.55)
-        # back: frame, black slatted panel, slats in white
-        outer = np.array(P(back))
-        inner = np.array(shrink(outer, 4.5 * s))
+    def rounded(pts, r=0.18, it=2):
+        """Chaikin corner cutting: a tube frame bends, it has no sharp corners."""
+        q = np.array(pts, float)
+        for _ in range(it):
+            n = len(q); out = []
+            for i in range(n):
+                a_, b_ = q[i], q[(i + 1) % n]
+                out += [a_ + (b_ - a_) * r, a_ + (b_ - a_) * (1 - r)]
+            q = np.array(out)
+        return q
+
+    # the right lounger read off the reference (seen from behind, three-quarter); the left one is the same
+    # lounger further along the deck
+    CH = dict(
+        shadow=[(70, 1058), (150, 1056), (240, 1056), (272, 1049), (272, 1073), (80, 1076)],
+        legs=[[(111, 1029), (116, 1062), (134, 1064), (140, 1031)],
+              [(201, 1029), (208, 1062), (224, 1063), (232, 1027)],
+              [(253, 1021), (257, 1046), (264, 1046), (267, 1019)]],
+        under=[(160, 1033), (177, 1033), (173, 1053), (164, 1053)],
+        rail=[(108, 1028), (205, 1028), (232, 1025), (270, 1016)],
+        seat=[(229, 999), (272, 1004), (272, 1013), (232, 1020)],
+        back=[(122, 942), (205, 941), (234, 1021), (147, 1025)],
+        panel=[(128.5, 952), (198.5, 951), (224, 1015), (153, 1018.5)])
+    for dx, dy in [(-190, -2), (0, 0)]:
+        D = lambda pts: [(x + dx, y + dy) for x, y in pts]          # noqa: E731
+        tone(sh, m(P(D(CH['shadow']))), level=0.45, lpi=60)
+        # legs: open tube loops, white with an inked edge; behind them, the base rail
+        for lg in CH['legs']:
+            tube(D(lg), 1.05)
+        # the far leg under the seat, in the seat's shadow
+        tone(sh, m(P(D(CH['under']))), level=0.7, lpi=60)
+        tube(D(CH['rail']), 1.15)
+        # seat cushion beyond the back: lit top, toned front edge
+        seat = P(D(CH['seat']))
+        sh.fill(seat, mode='white')
+        tone(sh, m([seat[3], seat[2], (seat[2][0], seat[2][1] - 3 * s), (seat[3][0], seat[3][1] - 3 * s)]),
+             level=0.3, lpi=60)
+        sh.stroke(np.vstack([seat, seat[:1]]), pen='saji', pressure=0.7, taper=(0, 0), smooth=False)
+        # back: a white tube frame with rounded corners round a black slatted panel
+        outer = rounded(P(D(CH['back'])))
+        inner = np.array(P(D(CH['panel'])))
         sh.fill([tuple(p) for p in outer], mode='white')
-        sh.fill([tuple(p) for p in inner])
+        sh.fill([tuple(p) for p in rounded(inner, 0.12, 1)])
         (a0, b0, c0, d0) = inner
-        for t in np.linspace(0.1, 0.9, 8):
-            p0, p1 = a0 + (d0 - a0) * t, b0 + (c0 - b0) * t
-            sh.stroke([tuple(p0 + (p1 - p0) * 0.07), tuple(p0 + (p1 - p0) * 0.93)], pen='white', pressure=0.12,
-                      mode='white', taper=(0.2, 0.2), smooth=False)
-        sh.stroke(np.vstack([outer, outer[:1]]), pen='saji', pressure=0.75, taper=(0, 0), smooth=False)
-        sh.stroke(np.vstack([inner, inner[:1]]), pen='maru', pressure=0.6, taper=(0, 0), smooth=False)
-        # the frame's shine: a thin white line down the lit (left) rail is already paper; shade the right rail
-        rail = [tuple(outer[1]), tuple(outer[2]), tuple(inner[2]), tuple(inner[1])]
-        tone(sh, m(rail), level=0.25, lpi=60)
-        # cushion: top face paper, front face toned, rounded ends
-        x0_, x1_, yt, yb = seat
-        top = P([(x0_, yt), (x1_, yt), (x1_, yt + 4), (x0_, yt + 4)])
-        front = P([(x0_, yt + 4), (x1_, yt + 4), (x1_ - 1, yb), (x0_ + 1, yb)])
-        sh.fill(top + front[2:], mode='white')
-        tone(sh, m(front), level=0.22, lpi=60)
-        sh.stroke(np.array(top[:2] + [front[2], front[3], top[0]]), pen='saji', pressure=0.75, taper=(0, 0),
-                  smooth=False)
-        sh.stroke(np.array([top[3], top[2]]), pen='maru', pressure=0.45, taper=(0, 0), smooth=False)
-        # seams on the cushion top
-        for xs_ in np.linspace(x0_, x1_, 5)[1:-1]:
-            sh.stroke(P([(xs_, yt + 0.5), (xs_, yt + 3.5)]), pen='maru', pressure=0.3, taper=(0, 0), smooth=False)
+        for tt in np.linspace(0.12, 0.92, 8):
+            p0, p1 = a0 + (d0 - a0) * tt, b0 + (c0 - b0) * tt
+            sh.stroke([tuple(p0 + (p1 - p0) * 0.1), tuple(p0 + (p1 - p0) * 0.9)], pen='white', pressure=0.14,
+                      mode='white', taper=(0.3, 0.3), smooth=False)
+        # the frame's right rail turns from the light: one tone on it, a shine line down the left rail
+        o4 = np.array(P(D(CH['back'])))
+        tone(sh, m([tuple(o4[1]), tuple(o4[2]), tuple(inner[2]), tuple(inner[1])]) & m([tuple(p) for p in outer]),
+             level=0.3, lpi=60)
+        sh.stroke(np.vstack([outer, outer[:1]]), pen='g_pen', pressure=0.55, taper=(0, 0), smooth=False)
+        sh.stroke(np.vstack([rounded(inner, 0.12, 1), rounded(inner, 0.12, 1)[:1]]), pen='maru', pressure=0.5,
+                  taper=(0, 0), smooth=False)
     # umbrella pole: two ruled lines with black between, behind the canopy
     px0, py0 = to_page(102, 772); px1, py1 = to_page(102, 1052)
     w = 2.6 * s

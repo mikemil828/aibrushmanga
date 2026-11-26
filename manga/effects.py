@@ -1,4 +1,5 @@
 """Manga effects and page furniture: focus lines, speed lines, flash, panel layouts, borders, captions."""
+import os
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
@@ -151,8 +152,16 @@ def _border(sheet, poly, width_mm):
         sheet._replaying = was
 
 
-def _font(size_px, bold=True):
+FONTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+# lettering faces bundled with the engine (SIL Open Font License, see fonts/OFL-ComicNeue.txt):
+# 'dialogue' for balloons, 'caption' for narration boxes, as English manga lettering does
+FACES = {'dialogue': 'ComicNeue-Bold.ttf', 'caption': 'ComicNeue-BoldItalic.ttf'}
+
+
+def _font(size_px, bold=True, face=None):
     names = ['DejaVuSans-Bold.ttf', 'FreeSansBold.ttf'] if bold else ['DejaVuSans.ttf', 'FreeSans.ttf']
+    if face:
+        names = [os.path.join(FONTS, FACES.get(face, face))] + names
     for n in names:
         try:
             return ImageFont.truetype(n, int(size_px))
@@ -161,11 +170,11 @@ def _font(size_px, bold=True):
     return ImageFont.load_default()
 
 
-def caption(sheet, xy, text, size_mm=3.6, pad_mm=1.6, box=True, bold=True):
+def caption(sheet, xy, text, size_mm=3.6, pad_mm=1.6, box=True, bold=True, face=None):
     """Narration box with lettering. xy = top-left (base px). Lettering is rendered as a raster and journaled."""
     k = sheet.k
     size = size_mm * sheet.ppm
-    f = _font(size, bold)
+    f = _font(size, bold, face)
     lines = text.split('\n')
     tmp = ImageDraw.Draw(Image.new('L', (1, 1)))
     ws = [tmp.textbbox((0, 0), ln, font=f) for ln in lines]
@@ -176,7 +185,7 @@ def caption(sheet, xy, text, size_mm=3.6, pad_mm=1.6, box=True, bold=True):
     bw, bh = int(tw + 2 * pad), int(th + 2 * pad)
     x0, y0 = int(xy[0] * k), int(xy[1] * k)
     sheet._log({'op': 'caption', 'xy': list(xy), 'text': text, 'size_mm': size_mm, 'pad_mm': pad_mm,
-                'box': box, 'bold': bold})
+                'box': box, 'bold': bold, 'face': face})
     sheet._n += 1
     was = sheet._replaying
     sheet._replaying = True

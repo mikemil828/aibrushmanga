@@ -91,14 +91,15 @@ def balloon(center, rx, ry, text, tail, size_mm=5.0):
     sh.fill([e0, tuple(tail), e1], mode='white')
     ell = np.array([(cx + rx * np.cos(a), cy + ry * np.sin(a)) for a in np.linspace(a1, a0 + 2 * np.pi, 140)])
     sh.stroke(np.vstack([[tail], ell, [tail]]), pen='g_pen', pressure=0.35, taper=(0, 0), smooth=False)
-    f = effects._font(size_mm * PPM)
+    f = effects._font(size_mm * PPM, face='dialogue')
     lines = text.split('\n')
     tmp = ImageDraw.Draw(Image.new('L', (1, 1)))
     bbs = [tmp.textbbox((0, 0), ln, font=f) for ln in lines]
     lh = size_mm * PPM * 1.2
     y = cy - lh * len(lines) / 2
     for ln, bb in zip(lines, bbs):
-        effects.caption(sh, (cx - (bb[2] - bb[0]) / 2 - 0.5, y - bb[1] * 0.5), ln, size_mm=size_mm, pad_mm=0, box=False)
+        effects.caption(sh, (cx - (bb[2] - bb[0]) / 2 - 0.5, y - bb[1] * 0.5), ln, size_mm=size_mm, pad_mm=0, box=False,
+                        face='dialogue')
         y += lh
 
 
@@ -111,7 +112,7 @@ with sh.clip(pmask(P1)):
     tp1 = lambda rx, ry: (b1[0] + (b1[2] - b1[0]) / 2 + (rx - 112) * s1, b1[1] + (ry - 650) * s1)
     panel1.draw_panel1(sh, b1, tp1, s1, W, H)
 effects.border(sh, P1, 0.8)
-effects.caption(sh, (b1[0] + 3 * PPM, b1[1] + 3 * PPM), 'Resort pool.\n2 p.m.', size_mm=3.8)
+effects.caption(sh, (b1[0] + 3 * PPM, b1[1] + 3 * PPM), 'RESORT POOL.\n2 P.M.', size_mm=3.8, face='caption')
 
 # ---- Panel 3: the full figure
 b3 = ibox(P3)
@@ -142,7 +143,7 @@ with sh.clip(pmask(P2)):
     r2 = figure.draw_figure(sh, b2, CROP2, dict(contour_mm=0.55))
     strokes += r2['strokes']
     balloon((b2[0] + 0.30 * (b2[2] - b2[0]), b2[1] + 0.12 * (b2[3] - b2[1])), 0.22 * (b2[2] - b2[0]),
-            0.075 * (b2[3] - b2[1]), 'Over\nhere!!', tail=tp2(470, 330), size_mm=4.6)
+            0.075 * (b2[3] - b2[1]), 'OVER\nHERE!!', tail=tp2(470, 330), size_mm=4.6)
 effects.border(sh, P2, 0.8)
 
 # ---- Panel 4 (middle left): the wave, hand up close, with motion marks

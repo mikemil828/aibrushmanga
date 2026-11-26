@@ -71,7 +71,8 @@ def replay(path, scale=1.0, until=None, progress=False):
                 sh._n += 1
                 effects._border(sh, [tuple(p) for p in d['poly']], d['width_mm'])
             elif op == 'caption':
-                effects.caption(sh, tuple(d['xy']), d['text'], d['size_mm'], d['pad_mm'], d['box'], d['bold'])
+                effects.caption(sh, tuple(d['xy']), d['text'], d['size_mm'], d['pad_mm'], d['box'], d['bold'],
+                                d.get('face'))
             if progress and i % 2000 == 0:
                 print(f'  line {i}  {time.time() - t0:.0f}s', flush=True)
     return sh

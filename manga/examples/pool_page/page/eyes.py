@@ -112,4 +112,9 @@ ImageDraw.Draw(_gb).polygon([(354, 1178), (361, 1178), (363, 1190), (353, 1207),
 mat[np.asarray(_gb, bool) & (mat == 2)] = 0
 # the thin line rising behind her ahoge is the umbrella's edge, not skin
 mat[0:104, 470:505][mat[0:104, 470:505] == 1] = 0
+# the hair round the fin by her right cheek (between the fin and her eye, and under it) was read as scales
+_hf = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_hf).polygon([(317, 287), (334.4, 343), (368.8, 394.5), (334, 405), (270, 429), (260, 460),
+                             (380, 460), (380, 287)], fill=1)
+mat[np.asarray(_hf, bool) & (mat == 3)] = 4
 np.save('mat.npy', mat)
