@@ -165,7 +165,7 @@ def pine(sh):
         lit = [(x + 1.6, y) for x, y in TRUNK[:3]]
         sh.stroke([P(*q) for q in lit], pen='white', mode='white', pressure=0.1, seed=621)
     rng = np.random.default_rng(62)
-    for k in range(6):
+    for k in range(0):
         t = rng.uniform(0.03, 0.25)
         y = 686 - t * 220
         x = np.interp(-y, [-q[1] for q in TRUNK], [q[0] for q in TRUNK])
@@ -180,13 +180,13 @@ def pine(sh):
             if nv[1] > -0.45 or abs(q[0] - np.interp(-q[1], [-t[1] for t in TRUNK], [t[0] for t in TRUNK])) < 3:
                 continue
             x, y = q
-            if rng.random() < 0.5:
+            if rng.random() < 0.3:
                 continue
             for j in range(1):
                 a = rng.normal(0, 0.4)
-                ln = rng.uniform(1.5, 3.0)
+                ln = rng.uniform(2.2, 3.8)
                 sh.stroke([P(x, y + 0.6), P(x + np.sin(a) * ln, y + 0.6 + np.cos(a) * ln)], pen='white',
-                          mode='white', pressure=0.1, taper=(0.1, 0.6), seed=700 + k)
+                          mode='white', pressure=0.16, taper=(0.1, 0.6), seed=700 + k)
                 k += 1
 
 
@@ -221,48 +221,38 @@ def house(sh, d, k):
         im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).rectangle([P(cx0, ct), P(cx1, ry + 2)], fill=1)
         cm = np.asarray(im, bool); both |= cm
     mist = d['mist']
-    sh.fill(nd.binary_dilation(rm, iterations=2) & ~nd.binary_dilation(wm, iterations=1) | both, mode='white')
-    # walls dark (black near, tone in the mist), lit windows left white
-    if mist < 0.5:
-        sh.fill(wm)
-    else:
-        tone(sh, wm, level=0.55, lpi=LPI)
+    sh.fill(both, mode='white')                       # clear what lies under it, no halo around it
+    # walls: a dark tone, not solid black, so the houses sit back in the evening haze
+    tone(sh, wm, level=0.72 - 0.25 * mist, lpi=LPI)
     for (wx0, wx1) in d['win']:
         a, b = P(wx0, ey + 1.5), P(wx1, min(ey + 9, wb - 3))
         im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).rectangle([a, b], fill=1)
-        sh.fill(np.asarray(im, bool), mode='white')
-        for t in np.linspace(wx0, wx1, 4)[1:-1]:                        # window bars
-            sh.stroke([P(t, ey + 1.5), P(t, min(ey + 9, wb - 3))], pen='maru', pressure=0.25, taper=(0, 0))
-    if mist < 0.5 and wb - ey > 10:                                     # the wall's timber rail, scraped
-        sh.stroke([P(ex0 + inset + 1, ey + 15), P(ex1 - inset - 1, ey + 15)], pen='white', mode='white',
-                  pressure=0.12, taper=(0, 0))
+        wmask = np.asarray(im, bool)
+        sh.fill(wmask, mode='white')
+        tone(sh, wmask, level=0.15, lpi=LPI)                             # lamplight, softened
     # thatch: a mid tone, darker along the eaves, straws from ridge to eave
-    tone(sh, rm, level=0.32 - 0.12 * mist, lpi=LPI)
+    tone(sh, rm, level=0.36 - 0.12 * mist, lpi=LPI)
     eb = [(ex0 + (rx0 - ex0) * 0.15, ey - (ey - ry) * 0.15), (ex1 - (ex1 - rx1) * 0.15, ey - (ey - ry) * 0.15),
           (ex1, ey), (ex0, ey)]
     im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon([P(*q) for q in eb], fill=1)
-    tone(sh, np.asarray(im, bool), level=0.55 - 0.2 * mist, lpi=LPI)
+    tone(sh, np.asarray(im, bool), level=0.48 - 0.15 * mist, lpi=LPI)
     rng = np.random.default_rng(300 + k)
-    n = int((ex1 - ex0) / (2.2 + 3 * mist))
+    n = int((ex1 - ex0) / (4.5 + 4 * mist))
     for t in np.linspace(0.02, 0.98, n):
         top = (rx0 + (rx1 - rx0) * t + rng.normal(0, 0.4), ry + rng.uniform(0, (ey - ry) * 0.25))
         bot = (ex0 + (ex1 - ex0) * t, ey - rng.uniform(0, (ey - ry) * 0.2))
-        sh.stroke([P(*top), P(*bot)], pen='maru', pressure=0.3 - 0.15 * mist, taper=(0.5, 0.3), seed=4000 + k * 100)
+        sh.stroke([P(*top), P(*bot)], pen='maru', pressure=0.18 - 0.08 * mist, taper=(0.5, 0.3), seed=4000 + k * 100)
     if d['lit']:                                                        # the slope catching the low sun
         a, b = ((rx1, ry), (ex1, ey)) if d['lit'] == 'r' else ((rx0, ry), (ex0, ey))
-        sh.stroke([P(a[0] - 1.5, a[1] + 1), P(b[0] - 2, b[1] - 1)], pen='white', mode='white', pressure=0.45)
+        sh.stroke([P(a[0] - 1.5, a[1] + 1), P(b[0] - 2, b[1] - 1)], pen='white', mode='white', pressure=0.2)
     if d['chim']:
         sh.fill(cm)
     if d['sticks']:                                                     # crossed sticks holding the ridge
         for t in np.linspace(0.15, 0.85, 4):
             x = rx0 + (rx1 - rx0) * t
-            sh.stroke([P(x - 4, ry - 5), P(x + 3, ry + 3)], pen='g_pen', pressure=0.35)
-            sh.stroke([P(x + 4, ry - 5), P(x - 3, ry + 3)], pen='g_pen', pressure=0.35)
-    pen, pr_ = ('maru', 0.5) if mist > 0.5 else ('g_pen', 0.35)
-    sh.stroke([P(*q) for q in roof + roof[:1]], pen=pen, pressure=pr_, taper=(0, 0), smooth=False)
-    if mist < 0.5:
-        sh.stroke([P(*q) for q in [wall[1], wall[2], wall[3], wall[0]]], pen=pen, pressure=pr_, taper=(0, 0),
-                  smooth=False)
+            sh.stroke([P(x - 3, ry - 4), P(x + 2, ry + 2)], pen='maru', pressure=0.4)
+            sh.stroke([P(x + 3, ry - 4), P(x - 2, ry + 2)], pen='maru', pressure=0.4)
+    sh.stroke([P(*q) for q in roof + roof[:1]], pen='maru', pressure=0.45 - 0.2 * mist, taper=(0, 0), smooth=False)
 
 
 # ------------------------------------------------------------------ paddies, banks, path
@@ -325,7 +315,9 @@ def paddies(sh, sd):
     mud = km[labm]
     mud = nd.binary_fill_holes(nd.gaussian_filter(mud.astype(np.float32), 3.0) > 0.5)   # one band, not blots
     mp = upm(mud)
-    sh.fill(mp)
+    core = upm(nd.binary_erosion(mud, iterations=4))
+    tone(sh, mp & ~core, level=0.7, lpi=LPI)
+    sh.fill(core)
     # the wet edge where mud meets water catches the light: a thin white rim, broken
     rim = mp & ~nd.binary_erosion(mp, iterations=2) & nd.binary_dilation(upm(w & ~mud), iterations=3)
     rng2 = np.random.default_rng(14)
