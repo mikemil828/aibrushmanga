@@ -197,7 +197,8 @@ def paddies(sh, sd):
     Lw = np.where(sd, Lw, L)
     lv = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, 2.5)), 0, 0.5)
     lv[lv < 0.04] = 0
-    lv = np.where(Z['shadow'], 0.72, lv)
+    core = nd.gaussian_filter(Z['shadow'].astype(np.float32), 3.0)
+    lv = np.maximum(lv, np.clip(core * 1.5, 0, 1) * 0.74)
     lay(sh, w, lv, kind='line', angle=90.0)          # angle 90 = horizontal lines
     glint = w & (Ls > 0.9)
     sh.fill(upm(nd.binary_opening(glint, iterations=1)), mode='white')
@@ -227,15 +228,56 @@ def banks(sh, sd):
     lv = np.where(Lb > 0.42, 0.28, 0.52)
     lv = np.where(Lb < 0.22, 0.7, lv)
     lay(sh, b, lv)
-    # grass blades: the dark lines of the reference, inked where the banks are close
-    rgbp = np.stack([up(ref[..., i]) for i in range(3)], -1)
-    lines = prep.xdog_lines(rgbp, sigma=1.1, p=22, eps=-0.012, phi=70, tidy=12) > 0.5
-    near = upm(b & (YY > 1080))
-    n, _ = trace.ink_line_art(sh, lines & near, pens=('maru', 'g_pen'), weight=1.0, min_len_px=10, min_px=1.0,
-                              seed=31, even=0.5)
+    n = grass(sh, b)
     dew = b & (L > 0.72) & (YY > 1000)
     sh.fill(upm(dew), mode='white')
     return n
+
+
+def blade(sh, x, y, ang, ln, near, seed, bend=0.25):
+    """One grass blade from its root (ref px): curves as it rises, tapers to a point."""
+    tip = (x + np.sin(ang) * ln, y - np.cos(ang) * ln)
+    mid = (x + np.sin(ang) * ln * 0.5 + bend * ln * np.sign(ang) * 0.3, y - np.cos(ang) * ln * 0.55)
+    sh.stroke([P(x, y), P(*mid), P(*tip)], pen='g_pen', pressure=0.16 + 0.24 * near, taper=(0.2, 1.0 + 2.0 * near),
+              seed=seed)
+
+
+def grass(sh, b):
+    """Grass on the banks, drawn: blades along the edges (where a bank meets water or path) and tufts inside,
+    bigger and denser toward the front."""
+    rng = np.random.default_rng(33)
+    k = 0
+    f = nd.gaussian_filter(b.astype(np.float32), 1.0)
+    for Pl in geom.outlines(f, 0.5, 20):
+        Q = geom.resample(Pl, 1.0)[0]
+        nrm = geom.normals(Q)
+        acc = 0.0
+        for q, nv in zip(Q, nrm):
+            x, y = q
+            if y < 860:
+                continue
+            near = np.clip((y - 860) / 860, 0, 1)
+            acc += 1.0
+            if acc < 8.0 - 3.5 * near:
+                continue
+            acc = 0.0
+            lean = np.clip(np.arctan2(nv[0], -nv[1]) * 0.5, -0.9, 0.9)       # toward the open side
+            for j in range(rng.integers(1, 2 + int(1.5 * near) + 1)):
+                ln = (3 + 16 * near) * rng.uniform(0.6, 1.2)
+                blade(sh, x + rng.normal(0, 0.8), y, lean + rng.normal(0, 0.35), ln, near, 20000 + k)
+                k += 1
+    # tufts inside the near banks
+    inner = nd.binary_erosion(b, iterations=3) & (YY > 1000)
+    ys, xs = np.nonzero(inner)
+    near_all = np.clip((ys - 860) / 860, 0, 1)
+    prob = 0.0012 + 0.0035 * near_all
+    pick = rng.random(len(xs)) < prob
+    for x, y, near in zip(xs[pick], ys[pick], near_all[pick]):
+        for j in range(3 + int(2 * near)):
+            ln = (4 + 14 * near) * rng.uniform(0.5, 1.1)
+            blade(sh, x + rng.normal(0, 1.2), y, rng.normal(0, 0.45), ln, near, 20000 + k)
+            k += 1
+    return k
 
 
 def seedlings(sh, sd):
@@ -284,75 +326,134 @@ def path(sh):
 
 
 # ------------------------------------------------------------------ the walker (hand-drawn from the reference)
-HAT = [(688, 963), (700, 966), (717, 977), (724, 990), (722, 996), (706, 1001), (690, 1001), (672, 999), (655, 995),
+HAT = [(688, 963), (700, 966), (717, 977), (724, 990), (723, 997), (706, 1000), (690, 1001), (672, 999), (654, 996),
        (651, 990), (656, 980), (676, 967)]
-HAT_RIM = [(651, 989), (724, 989), (722, 996), (706, 1001), (690, 1001), (672, 999), (655, 995)]
-HAORI = [(675, 1001), (705, 1001), (719, 1010), (731, 1030), (742, 1062), (744, 1082), (736, 1094), (716, 1098),
+HAT_RIM = [(651, 989), (724, 989), (723, 997), (706, 1000), (690, 1001), (672, 999), (654, 996)]
+HAT_SHADE = [(690, 965), (700, 966), (717, 977), (724, 989), (700, 990), (692, 989)]
+HAORI = [(677, 1001), (700, 1001), (718, 1011), (729, 1028), (740, 1058), (744, 1082), (736, 1094), (716, 1098),
          (712, 1084), (706, 1068), (670, 1068), (664, 1084), (660, 1095), (646, 1094), (633, 1086), (636, 1056),
-         (648, 1022), (662, 1008)]
-HAKAMA = [(670, 1068), (706, 1068), (712, 1084), (716, 1100), (721, 1150), (722, 1192), (714, 1203), (700, 1206),
-          (682, 1206), (661, 1204), (659, 1180), (661, 1120), (662, 1095), (664, 1084)]
-HANDS = [[(646, 1095), (658, 1096), (657, 1114), (650, 1116), (645, 1108)],
-         [(717, 1098), (735, 1094), (737, 1110), (730, 1118), (722, 1114)]]
-FEET = [[(672, 1204), (684, 1204), (684, 1218), (676, 1222), (671, 1214)],
-        [(687, 1203), (698, 1204), (699, 1226), (691, 1229), (686, 1214)]]
-HAKAMA_SHADE = [(704, 1086), (712, 1086), (716, 1100), (721, 1150), (722, 1192), (714, 1203), (704, 1205), (703, 1150)]
-SWORDS = [[(670, 1080), (674, 1084), (637, 1141), (632, 1138)], [(705, 1080), (710, 1079), (732, 1146), (727, 1149)]]
+         (646, 1026), (656, 1013)]
+HAKAMA = [(669, 1066), (706, 1066), (712, 1084), (716, 1100), (721, 1150), (722, 1192), (716, 1201), (700, 1206),
+          (676, 1204), (657, 1199), (656, 1180), (659, 1120), (662, 1095), (664, 1084)]
+KOSHIITA = [(671, 1066), (704, 1066), (703, 1076), (672, 1076)]
+HAKAMA_SHADE = [(704, 1086), (712, 1086), (716, 1100), (721, 1150), (722, 1192), (716, 1201), (705, 1204), (703, 1150)]
+LEG_SHADE = [(694, 1140), (712, 1150), (705, 1162), (690, 1176), (687, 1200), (680, 1202), (684, 1172)]
+HANDS = [[(645, 1094), (656, 1095), (656, 1108), (653, 1115), (647, 1114), (644, 1105)],
+         [(719, 1098), (733, 1095), (737, 1104), (735, 1115), (728, 1119), (722, 1113)]]
+TABI = [[(671, 1204), (684, 1204), (685, 1218), (680, 1224), (673, 1222), (670, 1213)],
+        [(686, 1200), (697, 1202), (700, 1214), (697, 1226), (690, 1227), (686, 1214)]]
+SOLES = [[(672, 1219), (684, 1218), (682, 1226), (674, 1227)], [(689, 1222), (699, 1219), (700, 1229), (691, 1231)]]
+SWORDS = [[(669, 1081), (673, 1085), (637, 1143), (632, 1140)], [(705, 1081), (710, 1080), (733, 1147), (728, 1150)]]
 
 
-def pm(poly):
+def pm(poly, closed=True):
     im = Image.new('L', (W, H), 0)
     ImageDraw.Draw(im).polygon([P(*q) for q in geom.catmull(np.array(poly + poly[:1], float), 6)], fill=1)
     return np.asarray(im, bool)
 
 
-def line(pts, pen='g_pen', pressure=0.45, mode='ink', seed=0, per=8):
+def line(pts, pen='g_pen', pressure=0.45, mode='ink', seed=0, per=8, taper=None):
     Q = geom.catmull(np.array(pts, float), per) if len(pts) > 2 else np.array(pts, float)
-    sh_.stroke([P(*q) for q in Q], pen=pen, pressure=pressure, mode=mode, seed=seed)
+    sh_.stroke([P(*q) for q in Q], pen=pen, pressure=pressure, mode=mode, seed=seed, taper=taper)
+
+
+def disc(c, r):
+    yy, xx = np.mgrid[:H, :W]
+    cx, cy = P(*c)
+    return (xx - cx) ** 2 + (yy - cy) ** 2 < (r * S) ** 2
 
 
 def walker(sh):
+    """The walker, from behind: about 22 x 54 mm on the page, so every detail is a line or a tone patch."""
     global sh_
     sh_ = sh
     hat, rim, haori, hakama = pm(HAT), pm(HAT_RIM), pm(HAORI), pm(HAKAMA)
-    hands = pm(HANDS[0]) | pm(HANDS[1]); feet = pm(FEET[0]) | pm(FEET[1])
+    hands = pm(HANDS[0]) | pm(HANDS[1])
+    tabi = pm(TABI[0]) | pm(TABI[1]); soles = pm(SOLES[0]) | pm(SOLES[1])
     swords = pm(SWORDS[0]) | pm(SWORDS[1])
-    allm = hat | haori | hakama | hands | feet | swords
+    allm = hat | haori | hakama | hands | tabi | soles | swords
     sh.fill(nd.binary_dilation(allm, iterations=2), mode='white')
-    # materials
-    tone(sh, hat & ~rim, level=0.12, lpi=LPI)
-    tone(sh, rim, level=0.42, lpi=LPI)
-    tone(sh, hakama, level=0.40, lpi=LPI)
-    tone(sh, hakama & pm(HAKAMA_SHADE), level=0.6, lpi=LPI)          # the hakama's shaded side
-    sh.fill(haori); sh.fill(feet); sh.fill(swords)
-    # hat: weave lines from the apex, brim edge
-    for k, ex in enumerate(np.linspace(656, 721, 9)):
-        ey = 990 - 6 * np.cos((ex - 688) / 40)
-        line([(688 + (ex - 688) * 0.12, 966), (ex, ey)], pen='maru', pressure=0.35, seed=60 + k)
-    line([(652, 989), (670, 992), (688, 993), (706, 992), (723, 989)], pen='maru', pressure=0.5, seed=70)
-    # haori: back seam, sleeve folds and the backlit rims, scraped in white
-    line([(688, 1004), (688.5, 1035), (688, 1066)], pen='white', pressure=0.18, mode='white', seed=80)
-    line([(661, 1028), (654, 1058), (651, 1088)], pen='white', pressure=0.22, mode='white', seed=81)
-    line([(716, 1028), (723, 1058), (728, 1090)], pen='white', pressure=0.22, mode='white', seed=82)
-    line([(646, 1024), (638, 1052), (635, 1084)], pen='white', pressure=0.3, mode='white', seed=83)
-    line([(727, 1026), (737, 1052), (742, 1078)], pen='white', pressure=0.24, mode='white', seed=84)
-    line([(664, 1010), (675, 1004)], pen='white', pressure=0.2, mode='white', seed=85)
-    yy, xx = np.mgrid[:H, :W]
-    cx, cy = P(686, 1022)
-    sh.fill((xx - cx) ** 2 + (yy - cy) ** 2 < (4.2 * S) ** 2, mode='white')      # the crest
-    # hakama: waist band and pleats
-    line([(669, 1077), (688, 1079), (707, 1077)], pressure=0.35, seed=90)
-    for k, pl in enumerate([[(676, 1086), (675, 1140), (673, 1198)], [(688, 1082), (689, 1120), (688, 1156)],
-                            [(699, 1088), (701, 1140), (702, 1196)], [(708, 1100), (712, 1150), (713, 1185)],
-                            [(667, 1100), (665, 1150), (664, 1190)]]):
-        line(pl, pressure=0.32 + 0.06 * (k % 2), seed=91 + k)
-    # hands: outline only
+
+    # ---- hat: woven sedge. Sunlit on the left, a tone step on the right, the brim's underside darker
+    tone(sh, hat & ~rim, level=0.10, lpi=LPI)
+    tone(sh, hat & ~rim & pm(HAT_SHADE), level=0.32, lpi=LPI)
+    tone(sh, rim, level=0.45, lpi=LPI)
+    sh.fill(rim & ~nd.binary_erosion(rim, iterations=2) & (np.arange(W)[None, :] < P(668, 0)[0]), mode='white')
+    for k, ex in enumerate(np.linspace(655, 722, 13)):                 # ribs from the crown
+        ey = 989 - 4 * np.cos((ex - 688) / 36)
+        line([(688 + (ex - 688) * 0.08, 965.5), (ex, ey)], pen='maru', pressure=0.28 + 0.12 * (ex > 692),
+             seed=60 + k, taper=(0.2, 0.6))
+    for k, f in enumerate((0.35, 0.62, 0.85)):                        # weave rings across the cone
+        xs = np.linspace(-1, 1, 9)
+        pts = [(688 + xx_ * 34 * f, 965 + 24 * f - 3 * f * (1 - xx_ ** 2)) for xx_ in xs]
+        line(pts, pen='maru', pressure=0.22, seed=75 + k, taper=(0.3, 0.3))
+    line([(652, 989.5), (670, 992), (688, 993), (706, 992), (724, 989.5)], pen='maru', pressure=0.55, seed=70)
+    sh.fill(disc((688, 965), 1.6))                                     # the knot at the crown
+
+    # ---- haori: black, read through white-out: backlit rims, seams, folds, the crest
+    sh.fill(haori)
+    W_ = dict(pen='white', mode='white')
+    line([(656, 1014), (645, 1030), (638, 1054), (634.5, 1083)], pressure=0.38, seed=80, **W_)   # sunlit rim, left
+    line([(719, 1012), (729, 1030), (737, 1052), (742, 1078)], pressure=0.26, seed=81, **W_)     # rim, right
+    line([(688, 1006), (688.5, 1036), (688, 1066)], pressure=0.16, seed=82, **W_)                # back seam
+    line([(662, 1012), (676, 1005)], pressure=0.16, seed=83, **W_)                               # shoulder seams
+    line([(701, 1005), (714, 1012)], pressure=0.16, seed=84, **W_)
+    line([(663, 1030), (659, 1050), (655, 1074), (653, 1090)], pressure=0.2, seed=85, **W_)      # sleeve seams
+    line([(714, 1030), (719, 1052), (724, 1074), (727, 1093)], pressure=0.2, seed=86, **W_)
+    for k, fl in enumerate([[(669, 1036), (667, 1052), (668, 1064)], [(700, 1038), (702, 1054), (701, 1064)],
+                            [(646, 1050), (643, 1070)], [(731, 1050), (735, 1070)]]):      # soft folds
+        line(fl, pressure=0.12, seed=87 + k, taper=(0.8, 1.2), **W_)
+    line([(647, 1093), (653, 1095), (659, 1094)], pressure=0.18, seed=92, **W_)                 # sleeve hems
+    line([(717, 1097), (726, 1097), (735, 1093)], pressure=0.18, seed=93, **W_)
+    sh.fill(disc((686, 1022), 4.3), mode='white')                                               # the crest
+    sh.fill(disc((686, 1022), 4.3) & ~disc((686, 1022), 3.5))
+    sh.fill(disc((686, 1022), 1.2))
+
+    # ---- hakama: grey, the koshiita board and ties, pleats with shaded valleys, the stepping leg
+    tone(sh, hakama, level=0.36, lpi=LPI)
+    tone(sh, hakama & pm(HAKAMA_SHADE), level=0.58, lpi=LPI)
+    tone(sh, hakama & pm(LEG_SHADE), level=0.55, lpi=LPI)
+    tone(sh, pm(KOSHIITA), level=0.2, lpi=LPI)
+    sh.fill(pm([(667, 1076), (707, 1076), (708, 1080), (666, 1080)]))                         # the himo ties
+    prep.ink_outline(sh, pm(KOSHIITA), pen='maru', pressure=(0.4, 0.6), seed=100)
+    for k, (pl, pr) in enumerate([([(676, 1084), (675.5, 1140), (673, 1198)], 0.42),
+                                  ([(686, 1084), (687, 1130), (686, 1150)], 0.34),
+                                  ([(694, 1086), (695, 1120), (694, 1142)], 0.3),
+                                  ([(711, 1086), (714, 1140), (715, 1196)], 0.42),
+                                  ([(666, 1092), (664, 1150), (663, 1195)], 0.32)]):
+        line(pl, pressure=pr, seed=101 + k, taper=(0.3, 1.5))
+    line([(694, 1142), (705, 1146), (712, 1151), (705, 1159), (692, 1171), (687, 1186), (686, 1201)],
+         pressure=0.38, seed=110, taper=(0.4, 1.0))                                            # the stepping leg
+    line([(698, 1162), (706, 1170), (708, 1190)], pressure=0.25, seed=111, taper=(0.5, 1.0))
+    line([(657, 1120), (656, 1160), (657, 1196)], pressure=0.28, seed=112, mode='white', pen='white')  # backlight
+    line([(658, 1199), (676, 1204.5), (700, 1206.5), (716, 1201)], pressure=0.45, seed=113)       # hem
+
+    # ---- swords: black scabbards with a highlight, guards at the hip
+    sh.fill(swords)
+    line([(667, 1089), (640, 1135)], pen='white', pressure=0.12, mode='white', seed=120)
+    line([(708, 1089), (727, 1138)], pen='white', pressure=0.12, mode='white', seed=121)
+    for (c, d) in [((667, 1087), (-0.53, 0.85)), ((708, 1087), (0.35, 0.94))]:      # guards across each blade
+        nx, ny = -d[1], d[0]
+        g = [(c[0] + nx * 4 + d[0] * 1, c[1] + ny * 4 + d[1] * 1), (c[0] - nx * 4 + d[0] * 1, c[1] - ny * 4 + d[1] * 1),
+             (c[0] - nx * 4 - d[0] * 1, c[1] - ny * 4 - d[1] * 1), (c[0] + nx * 4 - d[0] * 1, c[1] + ny * 4 - d[1] * 1)]
+        sh.fill(pm(g))
+    # ---- hands: skin left white; knuckles and a shaded edge
     for k, hnd in enumerate(HANDS):
-        prep.ink_outline(sh, pm(hnd), pen='g_pen', pressure=(0.25, 0.45), seed=110 + k)
-    # outline of the whole figure, heavier on the side away from the setting sun
-    prep.ink_outline(sh, allm, pen='g_pen', pressure=(0.45, 0.8), light=(-1.0, -0.4), seed=120)
-    prep.ink_outline(sh, hat, pen='g_pen', pressure=(0.4, 0.6), seed=121)
-    prep.ink_outline(sh, hakama, pen='g_pen', pressure=(0.35, 0.55), seed=122)
+        prep.ink_outline(sh, pm(hnd), pen='g_pen', pressure=(0.25, 0.45), seed=130 + k)
+    tone(sh, pm([(652, 1096), (656, 1095), (656, 1108), (653, 1115), (650, 1112)]), level=0.4, lpi=LPI)
+    tone(sh, pm([(729, 1097), (733, 1095), (737, 1104), (735, 1115), (729, 1112)]), level=0.4, lpi=LPI)
+    line([(647, 1107), (652, 1109)], pen='maru', pressure=0.3, seed=140)
+    line([(724, 1110), (730, 1112), (734, 1109)], pen='maru', pressure=0.3, seed=141)
+    # ---- feet: white tabi, black zori soles, the back foot lifted
+    sh.fill(soles)
+    for k, t in enumerate(TABI):
+        prep.ink_outline(sh, pm(t), pen='g_pen', pressure=(0.3, 0.5), seed=150 + k)
+    line([(674, 1212), (678, 1209), (683, 1212)], pen='maru', pressure=0.35, seed=160)          # straps
+    line([(689, 1210), (693, 1207), (698, 1211)], pen='maru', pressure=0.35, seed=161)
+    # ---- silhouette, heavier on the side away from the setting sun
+    prep.ink_outline(sh, allm, pen='g_pen', pressure=(0.45, 0.85), light=(-1.0, -0.4), seed=170)
+    prep.ink_outline(sh, hat, pen='g_pen', pressure=(0.4, 0.6), seed=171)
+    prep.ink_outline(sh, hakama, pen='g_pen', pressure=(0.35, 0.55), seed=172)
 
 
 if __name__ == '__main__':

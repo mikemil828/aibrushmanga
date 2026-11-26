@@ -11,6 +11,8 @@ python3 -m manga.replay manga/examples/rice_field/page.jsonl --scale 2 --out pan
 
 The decisions behind each part (screens, pens, what is drawn by hand) are written at the top of `panel.py`.
 What is drawn by hand rather than traced: the ridge lines of the left and middle mountains, the walker and his
-shadow, and each rice seedling (leaves fanned up from the tuft's base, with a broken reflection).
+shadow (hat weave, haori seams and backlit rims, hakama board, ties and pleats, sword guards, tabi and sandals),
+each rice seedling (leaves fanned up from the tuft's base, with a broken reflection) and the grass on the banks
+(blades along every bank edge and tufts inside, larger and denser toward the front).
 
 `ref.png` is all rights reserved by the fork owner and is not under the AGPL; see `REF-LICENSE.txt`.

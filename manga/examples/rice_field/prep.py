@@ -115,6 +115,10 @@ mtn_far = mtn & ~mtn_right
 below = (yy >= 672) & ~houses & ~pine & ~trees
 levee = below & green & ~path & ~figure
 levee = nd.binary_opening(levee, iterations=1)
+# far rows near the horizon: clean horizontal strips (smooth along the rows, not across them)
+far = (yy < 800)
+lf = nd.gaussian_filter(levee.astype(np.float32), (0.8, 7.0)) > 0.5
+levee = np.where(far, lf & below & ~path & ~figure, levee)
 water = below & ~levee & ~path & ~figure
 # shadow of the walker on the right paddy and path: dark, bluish
 SHADOW = [(686, 1222), (712, 1226), (745, 1255), (790, 1292), (850, 1322), (900, 1390), (940, 1470), (960, 1530),
