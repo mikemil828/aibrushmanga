@@ -123,6 +123,9 @@ with sh.clip(pmask(P3)):
     import umbrella3
     _, _, tp3, s3 = figure.source(b3, (130, 0, 1035, 1920))
     umbrella3.draw_umbrella(sh, tp3, s3)
+    import bushes3
+    _rgb3, _mat3 = figure.source(b3, (130, 0, 1035, 1920))[:2]
+    bushes3.draw_bushes(sh, _rgb3, _mat3, tp3, s3, b3, figure.LPI)
     sh.fill(place(figure.source(b3, (130, 0, 1035, 1920))[1] > 0, b3), mode='white')
     r3 = figure.draw_figure(sh, b3, (130, 0, 1035, 1920))
     strokes += r3['strokes']

@@ -79,4 +79,5 @@ def drawn_zone_and_sky(to_page, s, box):
     X0, Y0, X1, Y1 = box
     im = Image.new('L', (X1 - X0, Y1 - Y0), 0)
     ImageDraw.Draw(im).polygon([tuple(np.array(to_page(*p)) - (X0, Y0)) for p in FIN_SKY], fill=1)
-    return drawn_zone(to_page, s, box) | np.asarray(im, bool)
+    import bushes3
+    return drawn_zone(to_page, s, box) | np.asarray(im, bool) | bushes3.area_zone(to_page, s, box)
