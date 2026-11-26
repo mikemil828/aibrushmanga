@@ -67,7 +67,7 @@ def cel(d, m, base, shadow, delta, sigma, min_area):
 
 
 def draw_figure(sh, box, crop, opt=None):
-    o = dict(skin=(0.30, 0.52, 0.06), suit=(0.0, 0.14, 0.09), scales=(0.10, 0.28, 0.08), contour_w=2.2, inner_w=1.0,
+    o = dict(skin=(0.40, 0.58, 0.06), suit=(0.0, 0.14, 0.09), scales=(0.10, 0.28, 0.08), contour_w=2.2, inner_w=1.0,
              inner_min=10, white_edge=1, blush=True, strands=0.6, hair_density=0.10, contour='even', contour_mm=0.42, even=0.7)
     o.update(opt or {})
     rgb, mat, to_page, s = source(box, crop)
@@ -123,7 +123,10 @@ def draw_figure(sh, box, crop, opt=None):
     # 4. hair: strands that follow the flow over a mid tone, black in the deepest shadow, paper where it shines
     if hair.any():
         cx, cy = to_page(505, 160)
+        # the shine band (paper) belongs on the crown only; over the forehead the locks stay toned
+        Yr = (np.arange(hair.shape[0])[:, None] + Y0 - to_page(0, 0)[1]) / s + 0 * np.arange(hair.shape[1])[None, :]
         hair_mod.draw_hair(sh, hair, rgb.mean(2), lines, box, s, style='tone', density=o['hair_density'],
+                           ring=Yr < 300,
                            root=np.array([cx - X0, cy - Y0]), deep_at=0.88)
     # 5. contour: G-pen, the heaviest line on the figure
     if o['contour'] == 'trace':
@@ -148,6 +151,7 @@ def draw_figure(sh, box, crop, opt=None):
         blk = np.isin(lab, 1 + np.nonzero(sz >= 20 * s * s)[0])
         sh.fill(place(sh, blk, box))
     eyes_hand.draw_eyes(sh, to_page, s)
+    eyes_hand.draw_cheek_scales(sh, to_page, s)
     # 7. blush: a few short hatched strokes on each cheek, the manga shorthand for a flush
     if o['blush']:
         rng = np.random.default_rng(9)

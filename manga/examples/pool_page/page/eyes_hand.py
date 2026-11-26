@@ -15,9 +15,21 @@ EYES = [
 ]
 
 
+CHEEKS = [
+    [(380, 430), (386, 447), (394, 466), (403, 486), (415, 505), (402, 492), (408, 481), (397, 476), (402, 467),
+     (392, 461), (413, 451), (396, 444), (388, 435)],
+    [(603, 448), (596, 468), (586, 486), (572, 503), (556, 516), (545, 521), (551, 509), (566, 500), (568, 492),
+     (562, 483), (574, 480), (572, 470), (563, 463), (580, 458), (590, 452)],
+]
+
+
 def eye_region(W, H, pad=0):
     im = Image.new('L', (W, H), 0)
     dr = ImageDraw.Draw(im)
+    for c in CHEEKS:
+        dr.polygon(c, fill=1)
+        if pad:
+            dr.line(c + [c[0]], fill=1, width=int(2 * pad))
     for e in EYES:
         pts = e['upper'] + e['lower'][::-1]
         dr.polygon(pts, fill=1)
@@ -74,3 +86,23 @@ def draw_eyes(sh, to_page, s):
             sh.stroke(np.array(P(f)), pen='g_pen', pressure=0.5, taper=(0.0, 1.0))
         # lower lid: a light maru line, open at the inner corner
         sh.stroke(np.array(P(e['lower'])), pen='maru', pressure=0.45, taper=(0.6, 0.6))
+
+
+def draw_cheek_scales(sh, to_page, s):
+    """The scale patches on her cheeks: pale, clean-edged, with two or three inner scale lines."""
+    W, H = int(round(sh.W / sh.k)), int(round(sh.H / sh.k))
+    for c in CHEEKS:
+        P = [to_page(x, y) for x, y in c]
+        sh.fill(P, mode='white')
+        im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon(P, fill=1)
+        tone(sh, np.asarray(im, bool), level=0.12, lpi=60)
+        sh.stroke(np.array(P + [P[0]]), pen='maru', pressure=0.75, taper=(0, 0), smooth=False)
+        # inner scale lines: from each inner notch a short arc toward the outer edge
+        n_out = 5 if len(c) == 13 else 6
+        outer, inner = c[:n_out], c[n_out:]
+        for k, (nx, ny) in enumerate(inner[1::2]):
+            j = min(len(outer) - 1, int(round((1 - (k + 1) / (len(inner) / 2 + 1)) * (len(outer) - 1))))
+            ox, oy = outer[j]
+            mx, my = (nx + ox) / 2 + (oy - ny) * 0.12, (ny + oy) / 2 - (ox - nx) * 0.12
+            sh.stroke(np.array([to_page(nx, ny), to_page(mx, my), to_page(ox * 0.7 + nx * 0.3, oy * 0.7 + ny * 0.3)]),
+                      pen='maru', pressure=0.4, taper=(0, 0.6))

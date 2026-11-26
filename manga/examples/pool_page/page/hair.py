@@ -39,7 +39,7 @@ def _streamline(theta, m, x, y, step, nmax, ref_dir=None):
     return np.array(P) if len(P) >= 3 else None
 
 
-def draw_hair(sh, hair, gray, lines, box, s, style='strands', seed=7, root=None, density=0.12, deep_at=0.75):
+def draw_hair(sh, hair, gray, lines, box, s, style='strands', seed=7, root=None, density=0.12, deep_at=0.75, ring=None):
     """hair, gray, lines: panel-size arrays. root: (x, y) panel px of the crown, strokes taper away from it."""
     X0, Y0, X1, Y1 = box
     H, W = hair.shape
@@ -61,7 +61,10 @@ def draw_hair(sh, hair, gray, lines, box, s, style='strands', seed=7, root=None,
         if style == 'tone':
             # mid tone for the mass, paper where the reference shines (the highlight band)
             lit = nd.binary_opening((t < 0.12) & hair, iterations=max(1, int(s)))
-            tone(sh, full(hair & ~lit), level=0.58, lpi=60)
+            if ring is not None:
+                lit &= ring
+            tone(sh, full(hair & ~lit), level=np.where(full((t < 0.12) & hair & ~lit), 0.3, 0.58).astype(np.float32),
+                 lpi=60)
         # solid black in the deepest third
         deep = nd.binary_opening((t > deep_at) & hair, iterations=max(1, int(s)))
         sh.fill(full(deep))
