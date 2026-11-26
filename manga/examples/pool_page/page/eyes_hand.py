@@ -3,17 +3,29 @@ import numpy as np
 from PIL import Image, ImageDraw
 from manga import geom, tone
 
-EYES = [
-    dict(upper=[(372, 364), (383, 355), (400, 350), (420, 349), (437, 353), (450, 362), (454, 371)],
-         lower=[(386, 388), (403, 391), (427, 389), (448, 383)],
-         iris=(423, 372, 20, 22), pupil=(425, 372, 5.5, 8.5), lights=[(408, 370, 4.2), (421, 365, 2.2)],
-         flick=[[(450, 362), (458, 357), (463, 356)], [(453, 368), (461, 368)]]),
-    dict(upper=[(533, 384), (545, 375), (560, 370), (583, 370), (600, 377), (611, 388), (615, 397)],
-         lower=[(548, 404), (565, 408), (585, 410), (604, 409)],
-         iris=(564, 389, 20, 22), pupil=(566, 389, 5.5, 8.5), lights=[(551, 384, 4.2), (562, 380, 2.2)],
-         flick=[[(611, 388), (619, 384), (625, 384)], [(614, 395), (622, 397)]]),
-]
 
+# Read off the reference at 8x (ref px). lid = lower edge of the lash band (where the eye opening starts),
+# lash = top edge of the band, wing = the outer lashes sweeping past the corner, crease = the fold above.
+EYES = [
+    dict(lid=[(367.5, 376), (377.5, 362), (390, 358), (406, 357), (421, 357), (435, 359), (445, 365), (452.5, 372.5)],
+         lash=[(366, 372), (376, 351), (390, 347.5), (406, 346.5), (421, 347), (435, 350), (446, 358), (455, 369)],
+         wing=[[(376, 351), (367, 355), (359, 361)], [(370, 360), (362, 367), (358, 374)]],
+         spikes=[(381, 349.5, -2.5), (391, 347.5, -2.25), (402, 346.5, -2.0)], outer=0,
+         crease=[(400, 343), (420, 341.5), (438, 344), (451, 350)],
+         lower=[(386, 386), (402, 389.5), (424, 388), (442, 384), (452, 376)],
+         lower_lash=[(447, 381, 0.6), (450, 378, 0.35)],
+         iris=(424, 373, 20.5, 16.5), pupil=(425.6, 372, 5, 7.2),
+         lights=[(406.5, 370, 6.2, 4.4), (422.5, 365.5, 2.4, 2.4)], glint=(433, 380, 1.3)),
+    dict(lid=[(538, 387), (550, 379), (566, 375.5), (582.5, 376), (595, 380), (606, 387.5), (615, 395)],
+         lash=[(536, 379), (550, 370), (566, 367), (584, 367.5), (600, 371), (615, 381), (624, 392)],
+         wing=[[(615, 381), (624, 389), (631, 397)], [(612, 386), (621, 395), (627, 402)]],
+         spikes=[(589, 368, -1.1), (600, 371, -0.85), (609, 375, -0.6)], outer=1,
+         crease=[(556, 362), (576, 359), (597, 361), (614, 368)],
+         lower=[(543, 398), (556, 405), (575, 409.5), (595, 409.5), (607, 404)],
+         lower_lash=[(603, 407, 0.7), (607, 404, 0.45)],
+         iris=(566, 391, 20.5, 17), pupil=(564.5, 388, 5, 7.2),
+         lights=[(548.5, 384, 6.2, 4.4), (565, 381.5, 2.4, 2.4)], glint=(575, 399, 1.3)),
+]
 
 CHEEKS = [
     [(380, 430), (386, 447), (394, 466), (403, 486), (415, 505), (402, 492), (408, 481), (397, 476), (402, 467),
@@ -24,6 +36,7 @@ CHEEKS = [
 
 
 def eye_region(W, H, pad=0):
+    """Where the hand-drawn eyes go (ref px): traced lines and hair are kept out of it."""
     im = Image.new('L', (W, H), 0)
     dr = ImageDraw.Draw(im)
     for c in CHEEKS:
@@ -31,61 +44,127 @@ def eye_region(W, H, pad=0):
         if pad:
             dr.line(c + [c[0]], fill=1, width=int(2 * pad))
     for e in EYES:
-        pts = e['upper'] + e['lower'][::-1]
+        pts = e['lash'] + e['wing'][0][1:] + e['lower'][::-1]
         dr.polygon(pts, fill=1)
         if pad:
             dr.line(pts + [pts[0]], fill=1, width=int(2 * pad))
     return np.asarray(im, bool)
 
 
-def _poly_mask(sh, pts):
-    return [tuple(p) for p in pts]
+def _mask(W, H, pts):
+    im = Image.new('L', (W, H), 0)
+    ImageDraw.Draw(im).polygon([tuple(map(float, p)) for p in pts], fill=1)
+    return np.asarray(im, bool)
 
 
-def draw_eyes(sh, to_page, s):
-    P = lambda pts: [to_page(x, y) for x, y in pts]                      # noqa: E731
+def _ell(cx, cy, rx, ry, n=90, rot=0.0):
+    t = np.linspace(0, 2 * np.pi, n)
+    c, s_ = np.cos(rot), np.sin(rot)
+    x, y = rx * np.cos(t), ry * np.sin(t)
+    return np.column_stack([cx + x * c - y * s_, cy + x * s_ + y * c])
+
+
+def draw_eyes(sh, to_page, s, style='detailed'):
+    """The eyes, layer by layer, as a manga artist builds them:
+    sclera (paper) with the lid's cast shadow -> iris: dark upper half, light lower half, radial streaks and a
+    reflected crescent -> heavy iris rim -> pupil -> catch-lights -> lash band with gloss specks, lash spikes and
+    the outer wing -> crease -> lower lid and a few lower lashes."""
+    if style == 'simple':
+        import eyes_hand_v1
+        return eyes_hand_v1.draw_eyes(sh, to_page, s)
+    W, H = int(round(sh.W / sh.k)), int(round(sh.H / sh.k))
+    P = lambda pts: np.array([to_page(x, y) for x, y in pts], float)        # noqa: E731
+    sm = lambda pts, per=8: geom.catmull(P(pts), per=per)                    # noqa: E731
+    rng = np.random.default_rng(31)
     for e in EYES:
-        up = geom.catmull(np.array(P(e['upper']), float), per=8)
-        lo = geom.catmull(np.array(P(e['lower']), float), per=8)
-        opening = [tuple(p) for p in np.vstack([up, lo[::-1]])]
-        sh.fill(opening, mode='white')                                  # sclera is paper
-        # iris: an ellipse cut by the lids, darker toward the top (the lid's shadow), outlined
+        lid, low = sm(e['lid']), sm(e['lower'])
+        opening = np.vstack([lid, low[::-1]])
+        open_m = _mask(W, H, opening)
+        # 1. sclera: paper, with the upper lid's shadow lying across it
+        sh.fill([tuple(p) for p in opening], mode='white')
+        shadow = np.vstack([lid, (lid + [0, 3.5 * s])[::-1]])
+        tone(sh, _mask(W, H, shadow) & open_m, level=0.28, lpi=70, angle=45)
+        # 2. iris
         cx, cy = to_page(*e['iris'][:2]); rx, ry = e['iris'][2] * s, e['iris'][3] * s
-        t = np.linspace(0, 2 * np.pi, 90)
-        ell = np.column_stack([cx + rx * np.cos(t), cy + ry * np.sin(t)])
-        W, H = int(round(sh.W / sh.k)), int(round(sh.H / sh.k))
-        im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon([tuple(p) for p in ell], fill=1)
-        im2 = Image.new('L', (W, H), 0); ImageDraw.Draw(im2).polygon(opening, fill=1)
-        iris = np.asarray(im, bool) & np.asarray(im2, bool)
-        Y = np.arange(H, dtype=np.float32)[:, None]
-        lv = np.clip(0.85 - 0.5 * (Y - (cy - ry)) / (2 * ry), 0.3, 0.85) * np.ones((1, W), np.float32)
-        tone(sh, iris, level=lv, lpi=70, angle=45)
-        # the upper lid's shadow across the white of the eye
-        lid = Image.new('L', (W, H), 0)
-        ImageDraw.Draw(lid).line([tuple(p) for p in up], fill=1, width=int(7 * s))
-        tone(sh, np.asarray(lid, bool) & np.asarray(im2, bool) & ~iris, level=0.22, lpi=70, angle=45)
-        with sh.clip(np.asarray(im2, bool)):
-            sh.stroke(np.vstack([ell, ell[:1]]), pen='maru', pressure=0.7, taper=(0, 0))
-            px, py = to_page(*e['pupil'][:2]); prx, pry = e['pupil'][2] * s, e['pupil'][3] * s
-            sh.fill([(px + prx * np.cos(a), py + pry * np.sin(a)) for a in t])
-            for lx, ly, r in e['lights']:
+        iris = _mask(W, H, _ell(cx, cy, rx, ry)) & open_m
+        Y, X = np.mgrid[0:H, 0:W].astype(np.float32)
+        v = (Y - (cy - ry)) / (2 * ry)                                     # 0 top .. 1 bottom of the iris
+        band = _mask(W, H, np.vstack([lid - [0, 3 * s], (lid + [0, 0.85 * ry])[::-1]]))
+        lv = np.where(band, 0.88, np.clip(0.62 - 0.55 * (v - 0.42) / 0.58, 0.22, 0.62)).astype(np.float32)
+        tone(sh, iris, level=lv, lpi=75, angle=45)
+        if style == 'detailed':
+            # radial streaks in the lower half, from the pupil outward (the iris's fibres)
+            px, py = to_page(*e['pupil'][:2])
+            with sh.clip(iris):
+                for a in np.linspace(0.15 * np.pi, 0.85 * np.pi, 9) + rng.normal(0, 0.05, 9):
+                    r0, r1 = 0.45 * min(rx, ry) * 1.2, 0.92 * rx
+                    sh.stroke([(px + r0 * np.cos(a), py + r0 * np.sin(a) * ry / rx),
+                               (px + r1 * np.cos(a), py + r1 * np.sin(a) * ry / rx)],
+                              pen='maru', pressure=0.28, taper=(0.3, 0.6), smooth=False)
+                # reflected light: a soft crescent scraped back near the bottom of the iris
+                cres = _mask(W, H, _ell(cx + 0.1 * rx, cy + 0.55 * ry, 0.62 * rx, 0.30 * ry)) & \
+                    ~_mask(W, H, _ell(cx + 0.1 * rx, cy + 0.35 * ry, 0.70 * rx, 0.30 * ry))
+                tone(sh, cres & iris, level=0.15, lpi=75, mode='white')
+            # 3. rim: a heavy line round the iris, heavier at the top, cut by the lids
+            with sh.clip(open_m):
+                ring = _ell(cx, cy, rx, ry, 120)
+                top = ring[:, 1] < cy
+                pr = np.where(top, 1.0, 0.7)
+                sh.stroke(np.column_stack([ring, pr]), pen='g_pen', taper=(0, 0))
+        # 4. pupil
+        px, py = to_page(*e['pupil'][:2])
+        with sh.clip(open_m):
+            sh.fill([tuple(p) for p in _ell(px, py, e['pupil'][2] * s, e['pupil'][3] * s)])
+            # 5. catch-lights: a big one over the iris edge, a small one by the pupil, a glint below
+            for lx, ly, lrx, lry in e['lights']:
                 qx, qy = to_page(lx, ly)
-                sh.fill([(qx + r * s * np.cos(a), qy + r * s * 1.1 * np.sin(a)) for a in t], mode='white')
-        # upper lid: a heavy black lash band, thick in the middle, tapering to both corners
-        n = len(up)
-        w = (np.sin(np.linspace(0, np.pi, n)) ** 0.6) * 4.5 * s + 0.6 * s
-        nrm = geom.normals(up)
-        band = np.vstack([up - nrm * 0.3 * w[:, None], (up + nrm * w[:, None])[::-1]])
-        top = np.vstack([up + nrm * w[:, None]])
-        # normals may point either way: put the band above the lid line (smaller y)
-        if np.mean(top[:, 1]) > np.mean(up[:, 1]):
-            band = np.vstack([up + nrm * 0.3 * w[:, None], (up - nrm * w[:, None])[::-1]])
-        sh.fill([tuple(p) for p in band])
-        sh.stroke(np.array(P(e['upper'])), pen='g_pen', pressure=0.55, taper=(0.4, 0.8))
-        for f in e['flick']:
-            sh.stroke(np.array(P(f)), pen='g_pen', pressure=0.5, taper=(0.0, 1.0))
-        # lower lid: a light maru line, open at the inner corner
-        sh.stroke(np.array(P(e['lower'])), pen='maru', pressure=0.45, taper=(0.6, 0.6))
+                sh.fill([tuple(p) for p in _ell(qx, qy, lrx * s, lry * s, rot=-0.35)], mode='white')
+                sh.stroke(_ell(qx, qy, lrx * s, lry * s, 60, rot=-0.35), pen='maru', pressure=0.15, taper=(0, 0))
+            if style == 'detailed':
+                gx, gy = to_page(*e['glint'][:2])
+                sh.fill([tuple(p) for p in _ell(gx, gy, e['glint'][2] * s, e['glint'][2] * s)], mode='white')
+        # 6. lash band: solid black between lid and lash line, the wing sweeping past the corner
+        lash = sm(e['lash'])
+        n = min(len(lid), len(lash)); lid_, lash_ = lid[:n], lash[:n]
+        u = np.linspace(0, 1, n) if e['outer'] == 1 else np.linspace(1, 0, n)    # 0 inner corner .. 1 outer
+        prof = np.clip(0.30 + 1.4 * u, 0, 1) * (1 - 0.15 * np.clip((u - 0.85) / 0.15, 0, 1))
+        lash = lid_ + (lash_ - lid_) * prof[:, None]
+        sh.fill([tuple(p) for p in np.vstack([lid_, lash[::-1]])])
+        sh.stroke(np.column_stack([lid, np.full(len(lid), 0.7)]), pen='g_pen', taper=(0.3, 0.6))
+        for k, w in enumerate(e['wing']):
+            sh.stroke(np.column_stack([P(w), [0.9, 0.7, 0.3]]), pen='g_pen', taper=(0.0, 1.6 - 0.4 * k))
+        # lash spikes off the top edge, leaning toward the outer corner
+        for x, y, lean in e['spikes']:
+            bx, by = to_page(x, y)
+            L = (7.0 + rng.uniform(0, 2.5)) * s
+            dx, dy = np.cos(lean), np.sin(lean)
+            out = 1 if e['outer'] == 1 else -1                     # bend toward the outer corner
+            sh.stroke([(bx, by), (bx + dx * L * 0.5, by + dy * L * 0.5),
+                       (bx + dx * L + out * 1.2 * s, by + dy * L + 1.0 * s)],
+                      pen='g_pen', pressure=0.32, taper=(0.0, 1.0), seed=int(rng.integers(1 << 30)))
+        if style == 'detailed':
+            # gloss specks along the middle of the lash band (the shine on the lashes)
+            mid = lid_ + (lash - lid_) * 0.55
+            for i in sorted(rng.choice(np.arange(int(0.3 * n), int(0.8 * n)), 5, replace=False)):
+                qx, qy = mid[i] + rng.normal(0, 0.3 * s, 2)
+                sh.fill([tuple(p) for p in _ell(qx, qy, 0.45 * s, 0.32 * s, 10)], mode='white')
+            # 7. crease above the lid, thin and broken
+            sh.stroke(np.column_stack([sm(e['crease']), np.full(len(sm(e['crease'])), 0.35)]), pen='maru',
+                      taper=(1.0, 1.4))
+        # 8. lower lid: light, darker toward the outer corner; a couple of short lower lashes there
+        uo = np.linspace(0, 1, len(low)) if e['outer'] == 1 else np.linspace(1, 0, len(low))
+        sh.stroke(np.column_stack([low, 0.15 + 0.75 * uo ** 1.5]), pen='g_pen',
+                  taper=(1.2, 0.2) if e['outer'] == 1 else (0.2, 1.2))
+        # close the outer corner: the lid band and the lower line meet in a small black wedge
+        oc = lid_[-1] if e['outer'] == 1 else lid_[0]
+        ol = low[-1] if e['outer'] == 1 else low[0]
+        mid_c = 0.5 * (oc + ol) + np.array([(1.5 if e['outer'] == 1 else -1.5) * s, 0])
+        sh.fill([tuple(oc), tuple(mid_c), tuple(ol), tuple(0.5 * (oc + ol))])
+        if style == 'detailed':
+            for x, y, ln in e['lower_lash']:
+                bx, by = to_page(x, y)
+                sh.stroke([(bx, by), (bx + 1.8 * s * ln * 2, by + 2.6 * s * ln * 2)], pen='maru', pressure=0.5,
+                          taper=(0.0, 0.8))
 
 
 def draw_cheek_scales(sh, to_page, s):
