@@ -6,6 +6,12 @@ It is a separate package because ink needs none of the oil physics (wet mixing, 
 
 Requires Python 3.10+, NumPy, SciPy and Pillow.
 
+> **Provide a reference image for the best results.** The engine is at its best when it works from a
+> drawing or illustration you supply (your own art, or art you have the rights to): the figure's shapes,
+> materials and lines come from the reference, and the inker's decisions (pens, tones, blacks, cleanup)
+> go on top, as in `examples/pool_page/`. Figures drawn without a reference, from coordinates alone, come
+> out stiff and simplified, so they are not included as examples.
+
 ## Quick start
 
 ```python
@@ -40,13 +46,17 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 ## Examples
 
 - `examples/sampler.py`: every tool on one sheet.
-- `examples/pool_page/`: a four-panel manga page drawn from an anime illustration used as reference (see its README).
+- `examples/pool_page/`: a four-panel manga page drawn from a reference illustration (see its README). This is
+  the recommended way to work: start from a reference image.
 
 ## What it can't do yet
 
 - Real photos are not supported yet (planned for later).
 - Figures traced from a reference are the weak point. Contours come from colour classes plus an XDoG line map, so faces and hands read as shapes, not as drawn anatomy. A real inker simplifies far more.
 - Hatching follows straight rows, or a direction field without spacing control, so curved hatching can bunch up.
-- There is no lettering beyond simple caption boxes: no speech balloons and no vertical text yet.
+- Without a reference image, figures have to be built from hand-placed coordinates and come out stiff and
+  simplified; detailed characters, hands and dynamic poses need a reference.
+- Lettering is caption boxes and the bundled Comic Neue face; speech balloons are drawn per page, and there is no
+  vertical text yet.
 - Tone is laid flat. There is no moiré check when two dot tones overlap at different angles.
 - The noise (sand) tone is only roughly scale-stable, because its grain size is rounded to whole pixels.
