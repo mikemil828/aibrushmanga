@@ -51,6 +51,9 @@ def _mirror_right_to_left(R, mx=495.0, dy=-17.0):
 
 # the left eye was drawn a different shape from the right one; it now mirrors the right eye
 EYES[0] = _mirror_right_to_left(EYES[1])
+# her head tilts, so the mirrored left eye opened a little wider: raise its lower lid to match the right eye
+EYES[0]['lower'] = [(x, y - 4.0 * np.sin(np.pi * i / (len(EYES[0]['lower']) - 1)) - 1.5)
+                    for i, (x, y) in enumerate(EYES[0]['lower'])]
 
 # catch-lights placed on the iris itself (fractions of its radii), the same for both eyes: the light comes
 # from the upper left, so they are not mirrored
@@ -205,15 +208,26 @@ def draw_eyes(sh, to_page, s, style='detailed', iris_scale=None):
                           taper=(0.0, 0.8))
 
 
-def draw_cheek_scales(sh, to_page, s):
-    """The scale patches on her cheeks: pale, clean-edged, with two or three inner scale lines."""
+def draw_cheek_scales(sh, to_page, s, face=None):
+    """The scale patches on her cheeks: pale, clean-edged, with two or three inner scale lines.
+
+    face -- page-size bool mask of her skin: the patch's outer edge is pushed out past the cheek and cut to it,
+    so the scales run right to the edge of the face (where the face contour line already is)."""
     W, H = int(round(sh.W / sh.k)), int(round(sh.H / sh.k))
-    for c in CHEEKS:
-        P = [to_page(x, y) for x, y in c]
-        sh.fill(P, mode='white')
+    for ci, c in enumerate(CHEEKS):
+        n_out = 5 if len(c) == 13 else 6
+        sgn = -1 if ci == 0 else 1                                  # outward = away from the face's middle
+        c_ext = [(x + sgn * 14, y) for x, y in c[:n_out]] + list(c[n_out:])
+        P = [to_page(x, y) for x, y in c_ext]
         im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon(P, fill=1)
-        tone(sh, np.asarray(im, bool), level=0.12, lpi=60)
-        sh.stroke(np.array(P + [P[0]]), pen='maru', pressure=0.75, taper=(0, 0), smooth=False)
+        patch = np.asarray(im, bool)
+        if face is not None:
+            patch &= face
+        sh.fill(patch, mode='white')
+        tone(sh, patch, level=0.12, lpi=60)
+        # outline: the jagged inner edge only; the outer edge is the face contour, inked separately
+        Pin = [to_page(x, y) for x, y in [c[n_out - 1]] + list(c[n_out:]) + [c[0]]]
+        sh.stroke(np.array(Pin), pen='maru', pressure=0.75, taper=(0, 0), smooth=False)
         # inner scale lines: from each inner notch a short arc toward the outer edge
         n_out = 5 if len(c) == 13 else 6
         outer, inner = c[:n_out], c[n_out:]

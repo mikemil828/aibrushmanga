@@ -34,7 +34,7 @@ if n:
     drop = np.concatenate([[False], touch.astype(bool) & (size >= 25)])[lab]
     # only on the side where the scene's umbrella and bushes meet her (raised arm, hand, tail); the ahoge,
     # the hair's edge and the other arm are thin on purpose
-    zone = np.zeros_like(drop); zone[:1100, 730:] = True
+    zone = np.zeros_like(drop); zone[:430, 730:] = True
     drop &= zone
     mat[drop] = 0
     np.save('sliver.npy', drop)
@@ -47,4 +47,19 @@ import eyes_hand as _eh
 _sp = Image.new('L', (W, H), 0); ImageDraw.Draw(_sp).polygon(_eh.SUIT_PLAIN, fill=1)
 _sp = np.asarray(_sp, bool) & (mat > 0)
 mat[_sp & (mat != 4)] = 2
+np.save('mat.npy', mat)
+
+# the tail's outer edge as drawn in the reference (its black line): the material map let the dark bushes and the
+# umbrella pole above it count as tail, so everything above this arc stops being tail
+TAIL_EDGE = [(841.7, 1000), (860, 945), (880, 915), (900, 898.3), (930, 885), (960, 878.3), (990, 876),
+             (1020, 877.7), (1050, 882.7), (1075, 890), (1080, 892)]
+_tp = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_tp).polygon(TAIL_EDGE + [(1080, 700), (841.7, 700)], fill=1)
+_above = np.asarray(_tp, bool)
+mat[_above & (mat == 3)] = 0
+# and the band just under the arc is tail even where the map lost it to the dark background
+_tb = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_tb).polygon(TAIL_EDGE + [(1080, 905), (1046.7, 905), (1020, 908), (986.7, 920), (960, 936.7),
+                                         (940, 966.7), (930, 1000)], fill=1)
+mat[np.asarray(_tb, bool) & (mat == 0)] = 3
 np.save('mat.npy', mat)

@@ -38,6 +38,13 @@ def source(box, crop):
     rgb = np.asarray(REF.resize((pw, ph), Image.BICUBIC, box=(vx0, vy0, vx0 + vw, vy0 + vh)), np.float32) / 255
     mat = np.asarray(Image.fromarray(MAT).resize((pw, ph), Image.NEAREST, box=(vx0, vy0, vx0 + vw, vy0 + vh)))
     to_page = lambda rx, ry: (X0 + (rx - vx0) * s, Y0 + (ry - vy0) * s)
+    if s > 1.2:
+        # blown up from the reference, the material map comes out in stair steps and lumps (fingers turn
+        # uneven): smooth every material's edge at the panel's own scale, then take the strongest at each pixel
+        labels = np.unique(mat)
+        sig = 0.9 * s
+        score = np.stack([nd.gaussian_filter((mat == k).astype(np.float32), sig) for k in labels])
+        mat = labels[np.argmax(score, 0)].astype(mat.dtype)
     return np.clip(rgb, 0, 1), mat, to_page, s
 
 
@@ -68,8 +75,8 @@ def cel(d, m, base, shadow, delta, sigma, min_area):
 
 
 def draw_figure(sh, box, crop, opt=None):
-    o = dict(skin=(0.40, 0.58, 0.06), suit=(0.0, 0.14, 0.09), scales=(0.10, 0.28, 0.08), contour_w=2.2, inner_w=1.0,
-             inner_min=10, white_edge=1, blush=True, strands=0.6, hair_density=0.10, contour='even', contour_mm=0.42, even=0.7)
+    o = dict(skin=(0.40, 0.58, 0.06), suit=(0.0, 0.14, 0.09), scales=(0.12, 0.12, 0.08), contour_w=2.2, inner_w=1.0,
+             inner_min=10, white_edge=1, blush=True, strands=0.6, hair_density=0.10, contour='even', contour_mm=0.42, even=0.7, inner_pen='maru')
     o.update(opt or {})
     rgb, mat, to_page, s = source(box, crop)
     X0, Y0, X1, Y1 = box
@@ -93,7 +100,9 @@ def draw_figure(sh, box, crop, opt=None):
     core = nd.binary_erosion(fig, iterations=max(2, int(2 * s)))
     lab, nl = nd.label(full_lines, structure=np.ones((3, 3)))
     if nl:
-        inside = nd.mean(core, lab, np.arange(1, nl + 1))
+        # a figure's own outline lies on its edge, so "inside" means inside the figure or on its edge
+        near = nd.binary_dilation(fig, iterations=max(3, int(3 * s)))
+        inside = nd.mean(near, lab, np.arange(1, nl + 1))
         size = nd.sum(full_lines, lab, np.arange(1, nl + 1))
         out_px = size * (1 - inside)
         bad = (inside < 0.5) & (out_px > 30 * s)            # most of the line is out in the scene
@@ -139,7 +148,7 @@ def draw_figure(sh, box, crop, opt=None):
     if o['white_edge']:
         sh.fill(place(sh, nd.binary_dilation(contour, iterations=o['white_edge']) & fig & ~hair, box), mode='white')
     # 3. inner lines: maru, light; skip texture scraps on the skin
-    n_in, _ = trace.ink_line_art(sh, place(sh, inner, box), pens=('maru', 'maru'), weight=o['inner_w'],
+    n_in, _ = trace.ink_line_art(sh, place(sh, inner, box), pens=(o['inner_pen'], o['inner_pen']), weight=o['inner_w'],
                                  min_len_px=o['inner_min'] * s, seed=11, min_px=1.0, even=o['even'])
     # 4. hair: strands that follow the flow over a mid tone, black in the deepest shadow, paper where it shines
     if hair.any():
@@ -172,7 +181,11 @@ def draw_figure(sh, box, crop, opt=None):
         blk = np.isin(lab, 1 + np.nonzero(sz >= 20 * s * s)[0])
         sh.fill(place(sh, blk, box))
     eyes_hand.draw_eyes(sh, to_page, s)
-    eyes_hand.draw_cheek_scales(sh, to_page, s)
+    skin_face = (mat > 0) & (mat != HAIR)
+    eyes_hand.draw_cheek_scales(sh, to_page, s, face=place(sh, skin_face, box))
+    # the face contour runs along the patch's outer edge: ink it again on top of the pale patch
+    with sh.clip(place(sh, nd.binary_dilation(eyez, iterations=int(4 * s)) & ~nd.binary_erosion(fig, iterations=int(4 * s)), box)):
+        contour_mod.draw_contour(sh, fig, box, s, base_mm=o['contour_mm'], seed=15)
     # 7. blush: a few short hatched strokes on each cheek, the manga shorthand for a flush
     if o['blush']:
         rng = np.random.default_rng(9)

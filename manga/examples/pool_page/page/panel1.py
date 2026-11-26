@@ -6,6 +6,7 @@ a scalloped canopy rim, black lounger slats, the sea in line tone with sparkle s
 import numpy as np
 from PIL import Image, ImageDraw
 from manga import tone, geom
+from manga.pens import get as get_pen
 
 
 def draw_panel1(sh, box, to_page, s, W, H):
@@ -43,26 +44,64 @@ def draw_panel1(sh, box, to_page, s, W, H):
     # pole base
     bx, by = to_page(102, 1052)
     sh.fill([(bx + 14 * s * np.cos(t), by + 4 * s * np.sin(t)) for t in np.linspace(0, 2 * np.pi, 30)])
-    # loungers: backrest, seat and legs in saji; slats solid black with white gaps
-    for back, seat, legs in [
-        ([(-30, 940), (25, 943), (60, 1015), (5, 1015)], [(-30, 1025), (95, 1020), (95, 1034), (-30, 1040)],
-         [[(5, 1035), (30, 1070)], [(30, 1035), (5, 1070)], [(70, 1030), (90, 1065)]]),
-        ([(122, 943), (193, 942), (235, 1015), (165, 1016)], [(115, 1026), (275, 1016), (275, 1030), (115, 1040)],
-         [[(130, 1040), (150, 1075)], [(150, 1040), (130, 1075)], [(240, 1030), (262, 1068)], [(262, 1030), (240, 1068)]]),
+    # loungers, drawn from the reference: a tubular white frame round a black slatted back, a thick cushion,
+    # and V-shaped tube legs; each casts a soft shadow on the deck
+    def tube(pts, w, cap=True):
+        """A white tube with an inked edge on both sides: a wide black stroke, then a narrower white one."""
+        Q = P(pts)
+        sh.stroke(np.column_stack([Q, np.ones(len(Q))]), pen=get_pen('marker').with_(min_mm=w + 0.5, max_mm=w + 0.5,
+                  wobble_mm=0.0), taper=(0, 0), smooth=False)
+        sh.stroke(np.column_stack([Q, np.ones(len(Q))]), pen=get_pen('marker').with_(min_mm=w - 0.15,
+                  max_mm=w - 0.15, wobble_mm=0.0), taper=(0, 0), smooth=False, mode='white')
+
+    def shrink(quad, d):
+        c = np.mean(quad, 0)
+        out = []
+        for p in quad:
+            v = c - p
+            out.append(tuple(p + v / np.hypot(*v) * d))
+        return out
+
+    for back, seat, legs, shadow in [
+        ([(-48, 945), (12, 940), (46, 1006), (-14, 1008)], (-60, 100, 1004, 1016),
+         [[(-8, 1016), (12, 1058), (34, 1016)], [(58, 1016), (75, 1050), (92, 1016)]],
+         [(-60, 1052), (96, 1040), (104, 1060), (-60, 1070)]),
+        ([(122, 943), (205, 942), (234, 1022), (141, 1024)], (108, 270, 1020, 1032),
+         [[(112, 1032), (122, 1064), (140, 1032)], [(188, 1032), (205, 1064), (222, 1032)],
+          [(240, 1030), (256, 1058), (268, 1030)]],
+         [(100, 1058), (270, 1052), (278, 1070), (108, 1075)]),
     ]:
-        bp = P(back)
-        sh.fill(bp)
-        (a, b, c, d) = [np.array(p) for p in bp]
-        for t in np.linspace(0.12, 0.88, 7):            # white gaps between slats
-            p0, p1 = a + (d - a) * t, b + (c - b) * t
-            sh.stroke([tuple(p0 + (p1 - p0) * 0.06), tuple(p0 + (p1 - p0) * 0.94)], pen='white', pressure=0.15,
-                      mode='white', taper=(0, 0), smooth=False)
-        sh.stroke(bp + [bp[0]], pen='saji', pressure=0.8, taper=(0, 0), smooth=False)
-        sp = P(seat)
-        sh.fill(sp, mode='white')
-        sh.stroke(sp + [sp[0]], pen='saji', pressure=0.7, taper=(0, 0), smooth=False)
+        tone(sh, m(P(shadow)), level=0.40, lpi=60)
+        # legs first (behind the seat)
         for lg in legs:
-            sh.stroke(P(lg), pen='saji', pressure=0.9, taper=(0, 0), smooth=False)
+            tube(lg, 0.55)
+        # back: frame, black slatted panel, slats in white
+        outer = np.array(P(back))
+        inner = np.array(shrink(outer, 4.5 * s))
+        sh.fill([tuple(p) for p in outer], mode='white')
+        sh.fill([tuple(p) for p in inner])
+        (a0, b0, c0, d0) = inner
+        for t in np.linspace(0.1, 0.9, 8):
+            p0, p1 = a0 + (d0 - a0) * t, b0 + (c0 - b0) * t
+            sh.stroke([tuple(p0 + (p1 - p0) * 0.07), tuple(p0 + (p1 - p0) * 0.93)], pen='white', pressure=0.12,
+                      mode='white', taper=(0.2, 0.2), smooth=False)
+        sh.stroke(np.vstack([outer, outer[:1]]), pen='saji', pressure=0.75, taper=(0, 0), smooth=False)
+        sh.stroke(np.vstack([inner, inner[:1]]), pen='maru', pressure=0.6, taper=(0, 0), smooth=False)
+        # the frame's shine: a thin white line down the lit (left) rail is already paper; shade the right rail
+        rail = [tuple(outer[1]), tuple(outer[2]), tuple(inner[2]), tuple(inner[1])]
+        tone(sh, m(rail), level=0.25, lpi=60)
+        # cushion: top face paper, front face toned, rounded ends
+        x0_, x1_, yt, yb = seat
+        top = P([(x0_, yt), (x1_, yt), (x1_, yt + 4), (x0_, yt + 4)])
+        front = P([(x0_, yt + 4), (x1_, yt + 4), (x1_ - 1, yb), (x0_ + 1, yb)])
+        sh.fill(top + front[2:], mode='white')
+        tone(sh, m(front), level=0.22, lpi=60)
+        sh.stroke(np.array(top[:2] + [front[2], front[3], top[0]]), pen='saji', pressure=0.75, taper=(0, 0),
+                  smooth=False)
+        sh.stroke(np.array([top[3], top[2]]), pen='maru', pressure=0.45, taper=(0, 0), smooth=False)
+        # seams on the cushion top
+        for xs_ in np.linspace(x0_, x1_, 5)[1:-1]:
+            sh.stroke(P([(xs_, yt + 0.5), (xs_, yt + 3.5)]), pen='maru', pressure=0.3, taper=(0, 0), smooth=False)
     # umbrella pole: two ruled lines with black between, behind the canopy
     px0, py0 = to_page(102, 772); px1, py1 = to_page(102, 1052)
     w = 2.6 * s

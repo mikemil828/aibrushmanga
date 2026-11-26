@@ -47,7 +47,7 @@ def place(a, box):
     out = np.zeros((H, W), a.dtype); out[Y0:Y1, X0:X1] = a; return out
 
 
-def background(box, crop, light=0.55, min_len=18, sky_to=None, water=None):
+def background(box, crop, light=0.55, min_len=18, sky_to=None, water=None, drop=None):
     """The scene, drawn lightly: pale area tones, thin maru lines with the scraps left out."""
     rgb, mat, to_page, s = figure.source(box, crop)
     d = 1 - rgb.mean(2)
@@ -55,6 +55,8 @@ def background(box, crop, light=0.55, min_len=18, sky_to=None, water=None):
     lines = prep.xdog_lines(rgb, sigma=0.9 * s, p=24, eps=-0.015, phi=80, tidy=int(12 * s * s)) > 0.5
     lines = nd.binary_closing(lines, iterations=max(1, int(s / 1.2)))
     lines &= ~fig
+    if drop is not None:                         # parts inked by hand elsewhere
+        lines &= ~drop(to_page, s, box)
     lv = np.minimum(trace.area_tones(d, nd.binary_dilation(lines, iterations=1)), 0.75) * light
     lv[fig] = 0
     if sky_to is not None:                       # sky: a soft gradient tone, darker at the top
@@ -114,8 +116,13 @@ effects.caption(sh, (b1[0] + 3 * PPM, b1[1] + 3 * PPM), 'Resort pool.\n2 p.m.', 
 # ---- Panel 3: the full figure
 b3 = ibox(P3)
 with sh.clip(pmask(P3)):
-    n, fig3 = background(b3, (130, 0, 1035, 1920), light=0.5, min_len=34, sky_to=880, water=(1090, 1530))
+    import umbrella3
+    n, fig3 = background(b3, (130, 0, 1035, 1920), light=0.5, min_len=34, sky_to=880, water=(1090, 1530),
+                         drop=umbrella3.drawn_zone)
     strokes += n
+    import umbrella3
+    _, _, tp3, s3 = figure.source(b3, (130, 0, 1035, 1920))
+    umbrella3.draw_umbrella(sh, tp3, s3)
     sh.fill(place(figure.source(b3, (130, 0, 1035, 1920))[1] > 0, b3), mode='white')
     r3 = figure.draw_figure(sh, b3, (130, 0, 1035, 1920))
     strokes += r3['strokes']
@@ -142,7 +149,7 @@ with sh.clip(pmask(P4)):
     rgb4, mat4, tp4, s4 = figure.source(b4, CROP4)
     effects.speed_lines(sh, b4, angle=-12, count=70, length=(0.3, 0.8), seed=6)
     sh.fill(place(nd.binary_dilation(mat4 > 0, iterations=3), b4), mode='white')
-    r4 = figure.draw_figure(sh, b4, CROP4, dict(contour_mm=0.55, blush=False))
+    r4 = figure.draw_figure(sh, b4, CROP4, dict(contour_mm=0.55, blush=False, inner_pen='saji', inner_w=1.5, inner_min=14, even=0.85))
     strokes += r4['strokes']
     # wave marks: short arcs either side of the fingers, the shorthand for a hand in motion
     for (cx, cy, sgn) in [(735, 330, -1), (925, 345, 1)]:
