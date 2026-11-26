@@ -137,10 +137,57 @@ def village(sh):
     blk = nd.binary_opening(t & (Ls < 0.22), iterations=1)
     lay(sh, t & ~blk, np.full(L.shape, 0.62))
     sh.fill(upm(blk))
-    sh.fill(upm(Z['pine']))
+    pine(sh)
     lay(sh, Z['houses'], np.full(L.shape, 0.5))          # whatever of the old house shapes the drawn ones leave
     for k, hs in enumerate(HOUSES):
         house(sh, hs, k)
+
+
+TRUNK = [(197, 686), (203, 640), (210, 590), (216, 548), (223, 505), (227, 482)]
+BRANCHES = [[(206, 618), (186, 604), (172, 596)], [(209, 600), (232, 590), (248, 585)],
+            [(214, 556), (196, 545), (180, 540)], [(217, 540), (238, 530), (252, 526)],
+            [(222, 505), (204, 494), (188, 490)]]
+
+
+def pine(sh):
+    """The pine against the sunset: pads in black with needle tips scraped along their sunlit tops, a trunk and
+    branches with a lit edge on the side toward the sun."""
+    m = nd.binary_fill_holes(nd.binary_closing(Z['pine'], iterations=2))
+    m = nd.gaussian_filter(m.astype(np.float32), 1.0) > 0.5
+    pm_ = upm(m)
+    sh.fill(pm_)
+    for k, br in enumerate(BRANCHES):
+        sh.stroke([P(*q) for q in br], pen='g_pen', pressure=0.55, seed=600 + k)
+    sh.stroke([P(*q) for q in TRUNK], pen='brush', pressure=0.55, seed=620)
+    # the trunk's lit edge (the sun is low on the right of it) and a few bark marks
+    pads = upm(nd.binary_erosion(m, iterations=2) & (YY < 650))
+    with sh.clip(~pads):
+        lit = [(x + 1.6, y) for x, y in TRUNK[:3]]
+        sh.stroke([P(*q) for q in lit], pen='white', mode='white', pressure=0.1, seed=621)
+    rng = np.random.default_rng(62)
+    for k in range(6):
+        t = rng.uniform(0.03, 0.25)
+        y = 686 - t * 220
+        x = np.interp(-y, [-q[1] for q in TRUNK], [q[0] for q in TRUNK])
+        sh.stroke([P(x - 1.0, y), P(x + 1.2, y - 1.5)], pen='white', mode='white', pressure=0.08, seed=630 + k)
+    # needle tips: short white strokes fanning down from each pad's upper edge
+    f = nd.gaussian_filter(m.astype(np.float32), 1.0)
+    k = 0
+    for Pl in geom.outlines(f, 0.5, 15):
+        Q = geom.resample(Pl, 1.6)[0]
+        nrm = geom.normals(Q)
+        for q, nv in zip(Q, nrm):
+            if nv[1] > -0.45 or abs(q[0] - np.interp(-q[1], [-t[1] for t in TRUNK], [t[0] for t in TRUNK])) < 3:
+                continue
+            x, y = q
+            if rng.random() < 0.5:
+                continue
+            for j in range(1):
+                a = rng.normal(0, 0.4)
+                ln = rng.uniform(1.5, 3.0)
+                sh.stroke([P(x, y + 0.6), P(x + np.sin(a) * ln, y + 0.6 + np.cos(a) * ln)], pen='white',
+                          mode='white', pressure=0.1, taper=(0.1, 0.6), seed=700 + k)
+                k += 1
 
 
 # Thatched farmhouses read off the reference (ref px): ridge (x0, x1, y), eaves (x0, x1, y), wall bottom,
@@ -274,9 +321,17 @@ def paddies(sh, sd):
     mud = nd.gaussian_filter(nd.binary_opening(mud, iterations=2).astype(np.float32), 2.0) > 0.5
     labm, nm = nd.label(mud)
     am = nd.sum(mud, labm, np.arange(1, nm + 1))
-    km = np.zeros(nm + 1, bool); km[1:] = am > 900
+    km = np.zeros(nm + 1, bool); km[1:] = am > 1500
     mud = km[labm]
-    sh.fill(upm(mud))
+    mud = nd.binary_fill_holes(nd.gaussian_filter(mud.astype(np.float32), 3.0) > 0.5)   # one band, not blots
+    mp = upm(mud)
+    sh.fill(mp)
+    # the wet edge where mud meets water catches the light: a thin white rim, broken
+    rim = mp & ~nd.binary_erosion(mp, iterations=2) & nd.binary_dilation(upm(w & ~mud), iterations=3)
+    rng2 = np.random.default_rng(14)
+    lab_r, nr = nd.label(rim)
+    sh.fill(rim & (rng2.random(nr + 1) > 0.25)[lab_r], mode='white')
+
 
 
 def banks(sh, sd):
