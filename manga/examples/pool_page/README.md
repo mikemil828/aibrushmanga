@@ -2,7 +2,7 @@
 
 A grey anime illustration redrawn as an inked, toned manga page, with decisions made by hand per region.
 
-Run from a folder that holds the source image as `ref.png`:
+The reference image, `ref.png`, is included in this folder. It was made by the repository owner, who added it for this example. Run from this folder:
 
     python path/to/masks.py    # figure, hair and pool masks (polygons drawn for this image), saves *.npy
     python path/to/draw3.py    # draws draw3_beta.png
