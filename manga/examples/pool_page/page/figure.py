@@ -82,6 +82,33 @@ def draw_figure(sh, box, crop, opt=None):
     X0, Y0, X1, Y1 = box
     d = 1 - rgb.mean(2)
     ds = nd.gaussian_filter(d, 1.2 * s)
+    # a panel can leave out part of the figure that only peeks in at its edge (ref x below cut_left)
+    if o.get('cut_left'):
+        vx0 = SRCBOX[0][0]
+        cols = vx0 + np.arange(mat.shape[1]) / s
+        mat = np.where((cols < o['cut_left'])[None, :], 0, mat)
+        # keep only the main piece (the hand), and round the cut end so it reads as a fingertip, not a sawn edge
+        lab_c, nc = nd.label(mat > 0)
+        if nc > 1:
+            szc = nd.sum(mat > 0, lab_c, np.arange(1, nc + 1))
+            mat = np.where(lab_c == 1 + int(np.argmax(szc)), mat, 0)
+        near_cut = (cols < o['cut_left'] + 14)[None, :] & np.ones_like(mat, bool)
+        rounded = nd.gaussian_filter((mat > 0).astype(np.float32), 4 * s) > 0.5
+        mat = np.where(near_cut & ~rounded, 0, mat)
+    # scales: clean shapes. The traced patches came out sawtoothed and full of small islands; round their
+    # edges at the panel's scale, fill the pinholes and drop specks, so each patch reads as one smooth piece
+    sc = mat == SCALES
+    if sc.any() and o.get('smooth_scales', True):
+        scs = nd.gaussian_filter(sc.astype(np.float32), 2.2 * s) > 0.5
+        scs = nd.binary_fill_holes(scs) & (mat > 0)
+        lab_s, ns = nd.label(scs)
+        if ns:
+            sz = nd.sum(scs, lab_s, np.arange(1, ns + 1))
+            keep = np.zeros(ns + 1, bool); keep[1:] = sz >= 80 * s * s
+            scs = keep[lab_s]
+        # pixels that stop being scales take the skin's place; skin pixels inside the new shape become scales
+        mat = np.where(sc & ~scs, SKIN, mat)
+        mat = np.where(scs & (mat == SKIN), SCALES, mat)
     fig = mat > 0
     eyez = np.asarray(Image.fromarray(EYEZONE).resize((X1 - X0, Y1 - Y0), Image.NEAREST, box=SRCBOX[0]))
     hair = mat == HAIR
@@ -125,12 +152,28 @@ def draw_figure(sh, box, crop, opt=None):
     mb &= nd.binary_erosion(fig, iterations=max(3, int(3 * s)))
     matline = inner & nd.binary_dilation(mb, iterations=max(2, int(2.5 * s))) if o['contour'] != 'trace' else np.zeros_like(fig)
     inner = inner & ~matline
+    # dots of line (a pore or a crease end in the reference) print as specks: drop pieces under a few px
+    lab_d, nd_ = nd.label(inner, structure=np.ones((3, 3)))
+    if nd_:
+        szd = nd.sum(inner, lab_d, np.arange(1, nd_ + 1))
+        ext = np.array([max(sl[0].stop - sl[0].start, sl[1].stop - sl[1].start) for sl in nd.find_objects(lab_d)])
+        dot = np.zeros(nd_ + 1, bool); dot[1:] = ext < 5 * s
+        inner &= ~dot[lab_d]
+    # on the plain white swimsuit only the long form lines stay (the ribs' shadow edges, the hip line);
+    # short traced scraps there read as dirt on the fabric
+    on_suit = inner & (mat == SUIT)
+    lab_i, ni = nd.label(on_suit, structure=np.ones((3, 3)))
+    if ni:
+        szi = nd.sum(on_suit, lab_i, np.arange(1, ni + 1))
+        short = np.zeros(ni + 1, bool); short[1:] = szi < 80 * s
+        inner &= ~short[lab_i]
     # 1. tones, material by material
     lv = np.zeros(d.shape, np.float32)
     shadows = {}
     for key, k in (('skin', SKIN), ('suit', SUIT), ('scales', SCALES)):
         base, shad, delta = o[key]
-        l, shm = cel(ds, mat == k, base, shad, delta, 2.0 * s, int(40 * s * s))
+        # fabric shadow islands smaller than a thumbprint read as stains: the suit needs bigger shapes
+        l, shm = cel(ds, mat == k, base, shad, delta, 2.0 * s, int((160 if k == SUIT else 40) * s * s))
         if l is not None:
             lv = np.maximum(lv, l)
             shadows[key] = shm
@@ -178,7 +221,7 @@ def draw_figure(sh, box, crop, opt=None):
     lab, n = nd.label(blk)
     if n:
         sz = nd.sum(blk, lab, range(1, n + 1))
-        blk = np.isin(lab, 1 + np.nonzero(sz >= 20 * s * s)[0])
+        blk = np.isin(lab, 1 + np.nonzero(sz >= o.get('blk_min', 20) * s * s)[0])
         sh.fill(place(sh, blk, box))
     eyes_hand.draw_eyes(sh, to_page, s)
     skin_face = (mat > 0) & (mat != HAIR)

@@ -60,11 +60,16 @@ def draw_hair(sh, hair, gray, lines, box, s, style='strands', seed=7, root=None,
     if style in ('strands', 'tone'):
         if style == 'tone':
             # mid tone for the mass, paper where the reference shines (the highlight band)
-            lit = nd.binary_opening((t < 0.12) & hair, iterations=max(1, int(s)))
+            # decide light and shade on a smoothed map, and keep only shapes big enough to read as a band of
+            # shine: small light specks in the reference printed as grey blotches, not gloss
+            ts = nd.gaussian_filter(t, 1.5 * s)
+            lit = _keep_big(nd.binary_opening((ts < 0.14) & hair, iterations=max(1, int(1.5 * s))), 60 * s * s)
             if ring is not None:
                 lit &= ring
-            tone(sh, full(hair & ~lit), level=np.where(full((t < 0.12) & hair & ~lit), 0.3, 0.58).astype(np.float32),
-                 lpi=60)
+            # the whole mass in one mid tone; the shine is scraped in afterwards as white strands along the flow,
+            # so it reads as light on hair rather than as a cut-out paper shape
+            tone(sh, full(hair), level=0.58, lpi=60)
+            shine = lit
         # solid black in the deepest third
         deep = nd.binary_opening((t > deep_at) & hair, iterations=max(1, int(s)))
         sh.fill(full(deep))
@@ -95,11 +100,19 @@ def draw_hair(sh, hair, gray, lines, box, s, style='strands', seed=7, root=None,
         for pts, a, b in trace.trace(trace.thin(cl)):
             if len(pts) < 2 or geom.arclen(pts)[-1] < 10 * s:
                 continue
+            # a short closed loop is the outline of a shine spot in the reference, not a strand
+            if np.hypot(*(pts[0] - pts[-1])) < 4 * s and geom.arclen(pts)[-1] < 60 * s:
+                continue
+            ext = np.ptp(pts[:, :2], axis=0).max()
+            if ext < 30 * s and _turn(pts) > 2.5:              # or a piece of one, broken at a junction
+                continue
             if root is not None and np.hypot(*(pts[0] - root)) > np.hypot(*(pts[-1] - root)):
                 pts = pts[::-1]
             sh.stroke(geom.simplify(pts, 0.6) + [X0, Y0], pen='g_pen', pressure=0.45,
                       taper=(0.4 * s, 2.0 * s), seed=int(rng.integers(1 << 30)))
             n += 1
+        if style == 'tone' and shine.any():
+            n += _shine(sh, shine, hair, theta, box, s, rng, root)
     elif style == 'black_white':
         # black mass, then white strands scraped in where the reference is lit: strands of light
         sh.fill(full(hair))
@@ -121,6 +134,43 @@ def draw_hair(sh, hair, gray, lines, box, s, style='strands', seed=7, root=None,
                       taper=(1.2 * s, 1.2 * s), seed=int(rng.integers(1 << 30)))
             n += 1
     return n
+
+
+def _shine(sh, shine, hair, theta, box, s, rng, root):
+    """Scrape the shine: white strands along the flow, packed in the middle of each band and thinning to its
+    edges, each tapering at both ends."""
+    X0, Y0 = box[0], box[1]
+    H, W = hair.shape
+    core = nd.distance_transform_edt(shine)
+    depth = core / max(core.max(), 1)
+    sp = 3.2 * s
+    ys, xs = np.mgrid[0:H:sp, 0:W:sp]
+    xs = (xs + rng.uniform(0, sp, xs.shape)).ravel(); ys = (ys + rng.uniform(0, sp, ys.shape)).ravel()
+    zone = nd.binary_dilation(shine, iterations=int(2 * s)) & hair
+    n = 0
+    for x, y in zip(xs, ys):
+        ix, iy = int(x), int(y)
+        if not (0 <= ix < W and 0 <= iy < H) or not shine[iy, ix]:
+            continue
+        if rng.random() > 0.25 + 0.5 * min(1.0, depth[iy, ix] * 3):
+            continue
+        P = _streamline(theta, zone, x, y, 1.0 * s, int(rng.uniform(6, 16) * s))
+        if P is None or geom.arclen(P)[-1] < 5 * s or _turn(P) > 1.0:
+            continue
+        sh.stroke(geom.simplify(P, 0.5) + [X0, Y0], pen='maru', mode='white',
+                  pressure=float(0.35 + 0.5 * min(1.0, depth[iy, ix] * 3)), taper=(1.2 * s, 1.6 * s),
+                  seed=int(rng.integers(1 << 30)))
+        n += 1
+    return n
+
+
+def _keep_big(m, min_area):
+    lab, n = nd.label(m)
+    if not n:
+        return m
+    sz = nd.sum(m, lab, np.arange(1, n + 1))
+    keep = np.zeros(n + 1, bool); keep[1:] = sz >= min_area
+    return keep[lab]
 
 
 def _turn(P):

@@ -127,9 +127,13 @@ def draw_panel1(sh, box, to_page, s, W, H):
     rim_low = [(-40, 760), (0, 770), (45, 788), (102, 778), (165, 790), (205, 770), (250, 758)]
     under = P(rim_top + rim_low[::-1])
     sh.fill(under, mode='white')
-    tone(sh, m(P(rim_low + [hub])), level=0.45, lpi=60)
-    for tip in [(-20, 765), (45, 788), (165, 790), (230, 762)]:
-        sh.stroke(P([hub, tip]), pen='saji', pressure=0.85, taper=(0, 0.2), smooth=False)
+    # the underside: darkest round the hub, lighter toward the rim where light comes through the fabric
+    hx, hy = to_page(*hub)
+    tone(sh, m(P(rim_low + [hub])), level=(0.5, 0.26, (hx, hy), (hx, to_page(0, 790)[1])), lpi=60)
+    # only the two ribs that face us show; the outer ones run almost level with the eye and hide behind the
+    # valance (drawn, they read as a stray line overshooting the rim)
+    for tip in [(45, 788), (165, 790)]:
+        sh.stroke(P([hub, tip]), pen='saji', pressure=0.6, taper=(0, 0.2), smooth=False)
     # canopy top: paper, outlined with the G-pen; seams from the apex to each rim point
     top = P([apex] + rim_top[1:-1] + [apex])
     canopy = P([apex, (-40, 742), (0, 750), (60, 757), (102, 760), (150, 757), (205, 752), (250, 742)])

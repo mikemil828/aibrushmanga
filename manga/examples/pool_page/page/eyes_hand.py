@@ -223,7 +223,14 @@ def draw_cheek_scales(sh, to_page, s, face=None):
     for ci, c in enumerate(CHEEKS):
         n_out = 5 if len(c) == 13 else 6
         sgn = -1 if ci == 0 else 1                                  # outward = away from the face's middle
-        c_ext = [(x + sgn * 14, y) for x, y in c[:n_out]] + list(c[n_out:])
+        # the inner edge: rounded scallops (one per scale) instead of a sawtooth, which read as torn paper
+        inner_pts = np.array([c[n_out - 1]] + list(c[n_out:]) + [c[0]], float)
+        scal = geom.resample(geom.catmull(inner_pts, 8), 1.0)[0][:, :2]
+        from scipy import ndimage as _nd
+        sm = np.stack([_nd.gaussian_filter1d(scal[:, j], 5.0, mode="nearest") for j in range(2)], 1)
+        sm[0], sm[-1] = scal[0], scal[-1]
+        scal = sm
+        c_ext = [(x + sgn * 14, y) for x, y in c[:n_out]] + [tuple(q) for q in scal[1:-1, :2]]
         P = [to_page(x, y) for x, y in c_ext]
         im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon(P, fill=1)
         patch = np.asarray(im, bool)
@@ -232,8 +239,8 @@ def draw_cheek_scales(sh, to_page, s, face=None):
         sh.fill(patch, mode='white')
         tone(sh, patch, level=0.12, lpi=60)
         # outline: the jagged inner edge only; the outer edge is the face contour, inked separately
-        Pin = [to_page(x, y) for x, y in [c[n_out - 1]] + list(c[n_out:]) + [c[0]]]
-        sh.stroke(np.array(Pin), pen='maru', pressure=0.75, taper=(0, 0), smooth=False)
+        Pin = [to_page(x, y) for x, y in scal[:, :2]]
+        sh.stroke(np.array(Pin), pen='maru', pressure=0.6, taper=(0.3, 0.3), smooth=False)
         # inner scale lines: from each inner notch a short arc toward the outer edge
         n_out = 5 if len(c) == 13 else 6
         outer, inner = c[:n_out], c[n_out:]

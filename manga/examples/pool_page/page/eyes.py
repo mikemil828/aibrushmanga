@@ -117,4 +117,8 @@ _hf = Image.new('L', (W, H), 0)
 ImageDraw.Draw(_hf).polygon([(317, 287), (334.4, 343), (368.8, 394.5), (334, 405), (270, 429), (260, 460),
                              (380, 460), (380, 287)], fill=1)
 mat[np.asarray(_hf, bool) & (mat == 3)] = 4
+# the gap between the thighs: they touch in the reference, so the sliver of background there printed as a
+# hard white cut-out with a black rim; make it skin, and the skin's shadow tone closes it
+_gap = np.zeros_like(mat, bool); _gap[1445:1730, 560:606] = True
+mat[_gap & (mat == 0)] = 1
 np.save('mat.npy', mat)

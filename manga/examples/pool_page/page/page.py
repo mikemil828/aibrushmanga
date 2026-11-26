@@ -55,6 +55,20 @@ def background(box, crop, light=0.55, min_len=18, sky_to=None, water=None, drop=
     lines = prep.xdog_lines(rgb, sigma=0.9 * s, p=24, eps=-0.015, phi=80, tidy=int(12 * s * s)) > 0.5
     lines = nd.binary_closing(lines, iterations=max(1, int(s / 1.2)))
     lines &= ~fig
+    # specks and crumbs of line (float texture, water glints) print as dirt: drop pieces that are small in
+    # both size and extent; long thin pieces (tile joints) are kept, and their gaps bridged along the line
+    lab_b, nb = nd.label(lines, structure=np.ones((3, 3)))
+    if nb:
+        ext = np.array([max(sl[0].stop - sl[0].start, sl[1].stop - sl[1].start) for sl in nd.find_objects(lab_b)])
+        crumb = np.zeros(nb + 1, bool); crumb[1:] = ext < 9 * s
+        # blots: short, thick pieces (the float's print, glints) would fill as black diamonds
+        thick = nd.maximum(nd.distance_transform_edt(lines), lab_b, np.arange(1, nb + 1))
+        crumb[1:] |= (thick > 2.2 * s) & (ext < 30 * s)
+        lines &= ~crumb[lab_b]
+    if water is not None:                        # bridge the floor tiles' joints (below the pool) only
+        floor = (np.arange(lines.shape[0])[:, None] > to_page(0, water[1])[1] - box[1]) & np.ones_like(lines)
+        for k_ in (np.ones((1, int(5 * s)), bool), np.ones((int(5 * s), 1), bool)):
+            lines |= nd.binary_closing(lines, structure=k_) & ~fig & floor
     if drop is not None:                         # parts inked by hand elsewhere
         lines &= ~drop(to_page, s, box)
     lv = np.minimum(trace.area_tones(d, nd.binary_dilation(lines, iterations=1)), 0.75) * light
@@ -123,6 +137,27 @@ with sh.clip(pmask(P3)):
     strokes += n
     import umbrella3
     _, _, tp3, s3 = figure.source(b3, (130, 0, 1035, 1920))
+    # the shadowed corner inside the tail's curl (a potted plant in deep shade): one deliberate dark tone with
+    # the lit leaves left as clean light shapes, instead of the scattered black blots the tracing made
+    _rgbp, _matp = figure.source(b3, (130, 0, 1035, 1920))[:2]
+    _yy3, _xx3 = np.mgrid[:_matp.shape[0], :_matp.shape[1]]
+    _rx = (_xx3 + b3[0] - tp3(0, 0)[0]) / s3; _ry = (_yy3 + b3[1] - tp3(0, 0)[1]) / s3
+    _pocket = (_matp == 0) & (_rx > 925) & (_ry > 860) & (_ry < 1070)
+    _pocket = nd.binary_opening(_pocket, iterations=2)
+    _lp, _np_ = nd.label(_pocket)                       # only the enclosed curl, not the strip above the tail
+    if _np_:
+        _cy = nd.mean(_ry, _lp, np.arange(1, _np_ + 1))
+        _sz = nd.sum(_pocket, _lp, np.arange(1, _np_ + 1))
+        _keep = np.zeros(_np_ + 1, bool); _keep[1:] = (_cy > 940) & (_sz > 400 * s3 * s3)
+        _pocket = _keep[_lp]
+    if _pocket.any():
+        _g = nd.gaussian_filter(_rgbp.mean(2), 1.2 * s3)
+        _leaf = _pocket & (_g > 0.55)
+        _leaf = nd.binary_opening(_leaf, iterations=int(1.5 * s3))
+        sh.fill(place(_pocket, b3), mode='white')
+        tone(sh, place(_pocket & ~_leaf, b3), level=0.72, lpi=figure.LPI)
+        tone(sh, place(_leaf, b3), level=0.15, lpi=figure.LPI)
+        prep.ink_outline(sh, place(_leaf, b3), pen='maru', pressure=(0.3, 0.5), seed=77)
     umbrella3.draw_umbrella(sh, tp3, s3)
     import bushes3
     _rgb3, _mat3 = figure.source(b3, (130, 0, 1035, 1920))[:2]
@@ -152,9 +187,24 @@ CROP4 = (680, 250, 1000, 560)
 with sh.clip(pmask(P4)):
     rgb4, mat4, tp4, s4 = figure.source(b4, CROP4)
     effects.speed_lines(sh, b4, angle=-12, count=70, length=(0.3, 0.8), seed=6)
+    _cols4 = figure.SRCBOX[0][0] + np.arange(mat4.shape[1]) / s4
+    mat4 = np.where((_cols4 < 712)[None, :], 0, mat4)
+    _lab4, _n4 = nd.label(mat4 > 0)
+    if _n4 > 1:
+        _sz4 = nd.sum(mat4 > 0, _lab4, np.arange(1, _n4 + 1))
+        mat4 = np.where(_lab4 == 1 + int(np.argmax(_sz4)), mat4, 0)
     sh.fill(place(nd.binary_dilation(mat4 > 0, iterations=3), b4), mode='white')
-    r4 = figure.draw_figure(sh, b4, CROP4, dict(contour_mm=0.55, blush=False, inner_pen='saji', inner_w=1.5, inner_min=14, even=0.85))
+    # the sliver of her face at the panel's left edge is cut: it read as a broken shape, and the hand is the beat
+    r4 = figure.draw_figure(sh, b4, CROP4, dict(contour_mm=0.55, blush=False, inner_pen='saji', inner_w=1.5, inner_min=14,
+                                              even=0.85, cut_left=712, blk_min=60))
     strokes += r4['strokes']
+    # two specks where the contour turns sharply at the finger webs: scrape them and lay the skin tone back
+    _yy, _xx = np.mgrid[:H, :W]
+    _sp = np.zeros((H, W), bool)
+    for (_cx, _cy) in [(330, 1405), (406, 1401)]:
+        _sp |= (_xx - _cx) ** 2 + (_yy - _cy) ** 2 <= 16
+    sh.fill(_sp, mode='white')
+    tone(sh, _sp, level=0.40, lpi=figure.LPI)
     # wave marks: short arcs either side of the fingers, the shorthand for a hand in motion
     for (cx, cy, sgn) in [(735, 330, -1), (925, 345, 1)]:
         for k, rr in enumerate((26, 40, 54)):
