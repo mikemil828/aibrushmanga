@@ -10,6 +10,7 @@ from scipy import ndimage as nd
 from manga import tone, trace, prep, geom
 import eyes_hand
 import hair as hair_mod
+import contour as contour_mod
 EYEZONE = eyes_hand.eye_region(MAT.shape[1] if False else 1080, 1920, pad=7)
 
 REF = Image.open('../ref.png').convert('RGB')
@@ -67,7 +68,7 @@ def cel(d, m, base, shadow, delta, sigma, min_area):
 
 def draw_figure(sh, box, crop, opt=None):
     o = dict(skin=(0.30, 0.52, 0.06), suit=(0.0, 0.14, 0.09), scales=(0.10, 0.28, 0.08), contour_w=2.2, inner_w=1.0,
-             inner_min=10, white_edge=1, blush=True, strands=0.6, hair_density=0.10)
+             inner_min=10, white_edge=1, blush=True, strands=0.6, hair_density=0.10, contour='even', contour_mm=0.42, even=0.7)
     o.update(opt or {})
     rgb, mat, to_page, s = source(box, crop)
     X0, Y0, X1, Y1 = box
@@ -86,6 +87,14 @@ def draw_figure(sh, box, crop, opt=None):
     near_edge = nd.binary_dilation(edge, iterations=max(3, int(3 * s)))
     contour = lines & near_edge
     inner = lines & ~near_edge & ~hair
+    # lines on a boundary between materials (swimsuit edge, arm over body) are form lines, not detail
+    mb = np.zeros_like(fig)
+    for k in (SKIN, SUIT, SCALES):
+        mk = nd.binary_opening(mat == k, iterations=max(1, int(s)))
+        mb |= mk ^ nd.binary_erosion(mk, iterations=1)
+    mb &= nd.binary_erosion(fig, iterations=max(3, int(3 * s)))
+    matline = inner & nd.binary_dilation(mb, iterations=max(2, int(2.5 * s))) if o['contour'] != 'trace' else np.zeros_like(fig)
+    inner = inner & ~matline
     # 1. tones, material by material
     lv = np.zeros(d.shape, np.float32)
     shadows = {}
@@ -110,15 +119,27 @@ def draw_figure(sh, box, crop, opt=None):
         sh.fill(place(sh, nd.binary_dilation(contour, iterations=o['white_edge']) & fig & ~hair, box), mode='white')
     # 3. inner lines: maru, light; skip texture scraps on the skin
     n_in, _ = trace.ink_line_art(sh, place(sh, inner, box), pens=('maru', 'maru'), weight=o['inner_w'],
-                                 min_len_px=o['inner_min'] * s, seed=11, min_px=1.0)
+                                 min_len_px=o['inner_min'] * s, seed=11, min_px=1.0, even=o['even'])
     # 4. hair: strands that follow the flow over a mid tone, black in the deepest shadow, paper where it shines
     if hair.any():
         cx, cy = to_page(505, 160)
         hair_mod.draw_hair(sh, hair, rgb.mean(2), lines, box, s, style='tone', density=o['hair_density'],
                            root=np.array([cx - X0, cy - Y0]), deep_at=0.88)
     # 5. contour: G-pen, the heaviest line on the figure
-    n_c, _ = trace.ink_line_art(sh, place(sh, contour, box), pens=('g_pen', 'g_pen'), weight=o['contour_w'],
-                                min_len_px=6 * s, seed=12, min_px=1.6 * s)
+    if o['contour'] == 'trace':
+        n_c, _ = trace.ink_line_art(sh, place(sh, contour, box), pens=('g_pen', 'g_pen'), weight=o['contour_w'],
+                                    min_len_px=6 * s, seed=12, min_px=1.6 * s)
+    else:
+        # the silhouette as one even line; contour lines inside the figure (arm over body, thighs) traced, evened
+        n_c = contour_mod.draw_contour(sh, fig, box, s, base_mm=o['contour_mm'])
+        inside = (contour & nd.binary_erosion(fig, iterations=max(3, int(3 * s)))) | matline
+        n2, _ = trace.ink_line_art(sh, place(sh, inside, box), pens=('saji', 'saji'), weight=1.3,
+                                   min_len_px=10 * s, seed=13, min_px=1.4 * s, even=0.85)
+        n_c += n2
+        # the swimsuit's edge: a lighter even line round the suit, where the fabric meets skin
+        suit_m = nd.binary_opening(mat == SUIT, iterations=max(1, int(s)))
+        if suit_m.any():
+            n_c += contour_mod.draw_contour(sh, suit_m, box, s, base_mm=0.22, swing=0.25, pen='saji', seed=14)
     # 6. blacks inside the figure: pupils, mouth, deepest folds
     blk = smooth(((ds > 0.80) | (iris & (ds > 0.68))) & fig & ~hair & ~eyez, 1.0)
     lab, n = nd.label(blk)

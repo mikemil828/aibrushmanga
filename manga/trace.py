@@ -106,12 +106,14 @@ def trace(skel):
 
 
 def ink_line_art(sheet, lines, pens=('maru', 'g_pen'), split_mm=0.25, min_len_px=4.0, beta_px=3.0, tol=0.6,
-                 seed=0, weight=1.3, min_px=1.3):
+                 seed=0, weight=1.3, min_px=1.3, even=0.0):
     """Draw a line mask (bool, base px) as pen strokes.
 
     pens     -- (thin pen, thick pen): lines narrower than split_mm get the first.
     beta_px  -- parts of the mask thicker than 2*beta_px are solid black areas, not lines: they are filled, not
                 stroked. Returns (strokes, beta_mask).
+    even     -- 0..1: how far each line's width is pulled to its own median. The traced mask swells where
+                lines meet or blur; an inker's hand keeps a line's weight and changes it gradually.
     """
     from .pens import get as get_pen
     rng = np.random.default_rng(seed)
@@ -133,6 +135,10 @@ def ink_line_art(sheet, lines, pens=('maru', 'g_pen'), split_mm=0.25, min_len_px
                      np.clip(Qd[:, 0].round().astype(int), 0, m.shape[1] - 1)]
             w_px = np.maximum((2 * r - 1.0) * weight, min_px)
             w_mm = nd.uniform_filter1d(w_px, 3) / ppm
+            if even > 0:
+                med = np.median(w_mm)
+                sm = nd.gaussian_filter1d(np.clip(w_mm, 0.75 * med, 1.25 * med), 4, mode='nearest')
+                w_mm = (1 - even) * w_mm + even * sm
             pen = get_pen(pens[1] if np.median(w_mm) > split_mm else pens[0])
             p = np.clip((w_mm - pen.min_mm) / max(pen.max_mm - pen.min_mm, 1e-6), 0, 1) ** (1 / pen.gamma)
             pts = np.column_stack([Qd, np.clip(p, 0.05, 1.0)])

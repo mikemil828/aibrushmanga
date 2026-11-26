@@ -129,7 +129,7 @@ with sh.clip(pmask(P2)):
     c = tp2(510, 400)
     effects.flash(sh, c, r_in=0.42 * (b2[2] - b2[0]), r_out=1.2 * (b2[3] - b2[1]), count=150, seed=4)
     sh.fill(place(nd.binary_dilation(mat2 > 0, iterations=3), b2), mode='white')
-    r2 = figure.draw_figure(sh, b2, CROP2, dict(contour_w=2.6))
+    r2 = figure.draw_figure(sh, b2, CROP2, dict(contour_mm=0.55))
     strokes += r2['strokes']
     balloon((b2[0] + 0.30 * (b2[2] - b2[0]), b2[1] + 0.12 * (b2[3] - b2[1])), 0.22 * (b2[2] - b2[0]),
             0.075 * (b2[3] - b2[1]), 'Over\nhere!!', tail=tp2(470, 330), size_mm=4.6)
@@ -142,7 +142,7 @@ with sh.clip(pmask(P4)):
     rgb4, mat4, tp4, s4 = figure.source(b4, CROP4)
     effects.speed_lines(sh, b4, angle=-12, count=70, length=(0.3, 0.8), seed=6)
     sh.fill(place(nd.binary_dilation(mat4 > 0, iterations=3), b4), mode='white')
-    r4 = figure.draw_figure(sh, b4, CROP4, dict(contour_w=2.6, blush=False))
+    r4 = figure.draw_figure(sh, b4, CROP4, dict(contour_mm=0.55, blush=False))
     strokes += r4['strokes']
     # wave marks: short arcs either side of the fingers, the shorthand for a hand in motion
     for (cx, cy, sgn) in [(735, 330, -1), (925, 345, 1)]:
