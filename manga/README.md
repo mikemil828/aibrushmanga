@@ -48,6 +48,8 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 - `examples/sampler.py`: every tool on one sheet.
 - `examples/pool_page/`: a four-panel manga page drawn from a reference illustration (see its README). This is
   the recommended way to work: start from a reference image.
+- `examples/rice_field/`: a single landscape panel (paddies, village, mountains, a walker) drawn from a reference
+  image. It shows line tone for water, dot tone for land, and hand-drawn seedlings and figure (see its README).
 
 ## Tests
 

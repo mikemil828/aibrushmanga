@@ -39,6 +39,8 @@ exceptions:
 - `manga/examples/pool_page/ref.png` is artwork by the fork's owner (mikemil828), all rights reserved. It is
   included only so the pool page example can be run; it is not covered by the AGPL (see
   `manga/examples/pool_page/REF-LICENSE.txt`).
+- `manga/examples/rice_field/ref.png` was supplied by the fork's owner, all rights reserved, on the same terms
+  (see `manga/examples/rice_field/REF-LICENSE.txt`).
 
 ## Support
 
