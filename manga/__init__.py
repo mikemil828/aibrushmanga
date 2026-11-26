@@ -9,6 +9,8 @@ from .sheet import Sheet
 from .pens import Pen, PENS
 from .hatch import hatch
 from .tone import tone
-from . import effects, prep, geom, trace
+from . import effects, prep, geom, trace, nature, water, tools
+from .frame import Frame
 
-__all__ = ['Sheet', 'Pen', 'PENS', 'hatch', 'tone', 'effects', 'prep', 'geom', 'trace']
+__all__ = ['Sheet', 'Pen', 'PENS', 'hatch', 'tone', 'effects', 'prep', 'geom', 'trace', 'nature', 'water', 'tools',
+           'Frame']

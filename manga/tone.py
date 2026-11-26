@@ -78,7 +78,8 @@ def tone(sheet, mask=None, level=0.3, lpi=42.0, angle=45.0, kind='dot', phase=(0
 
     level -- a number, or an array at base resolution (a gradient or a tone map); a tuple (lo, hi, (x0, y0),
              (x1, y1)) makes a linear gradient from lo at the first point to hi at the second.
-    kind  -- 'dot', 'line' or 'noise'.
+    kind  -- 'dot', 'line' or 'noise'. For 'line', angle is the direction the lines step across:
+             angle=90 gives horizontal lines (still water), angle=0 vertical ones.
     mode  -- 'ink' lays the tone; 'white' scrapes tone and ink away (tone scratching for highlights).
     """
     lvl_arg = level

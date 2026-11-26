@@ -41,7 +41,30 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 | `tone` | Screentone: `kind='dot'`, `'line'` or `'noise'` (sand). `level` is a number, an array, or a gradient tuple. The grid is fixed to the sheet, so pieces cut from the same tone line up. `lpi` is physical: 50–65 for print, 27–42 for screen-size drafts. `mode='white'` scratches tone away. |
 | `effects` | `focus_lines`, `speed_lines`, `flash`, `layout` (panel grid with manga gutters and slanted edges), `border`, `caption`. |
 | `prep` | Measuring a reference photo: `darkness` (lightness, or `mode='value'` so red and blue read as mid-tones), `orientation`, `ink_outline` (inks a shape's contour, heavier on the side away from the light), `xdog_lines` (contour guides for figures). |
+| `prep.ink_contour` | Inks chosen stretches of a shape's edge as hand-length strokes: a ridge where sky meets mountain, a cloud's lit underside, the top of a grove. `keep=` picks the stretches, `style=` varies pen and weight per stretch. |
+| `Frame` | A reference image placed on the page. `P`/`pts` map reference px to page px, `up`/`upm` scale arrays and masks, `lay` lays tone from reference-sized masks and levels, `poly`/`disc`/`line` draw hand-placed shapes given in reference px. |
+| `nature` | Drawn vegetation: `blade`, `edge_grass` (blades along a bank's edges, leaning outward), `tufts`, `seedlings` (plants in water, with reflections). `depth(y)` sets size and density by distance. |
+| `water` | Still water: `calm_level` (line tone without streaks from things standing in it), `fill_under` (no halos around them), `mirror` (reflections), `ripples`. Use `angle=water.HORIZONTAL` for line tone. |
+| `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference). |
 | `replay` | `python -m manga.replay journal.jsonl --scale S --out file.png [--bw] [--until N]` |
+
+## Workflow that has worked
+
+Learned on the pool page and the rice-field panel.
+
+1. **Decide first, in writing.** Put the plan at the top of the page script: what is primary, which tone and
+   pen each part gets, and what is drawn by hand. The rice-field plan is a good template.
+2. **Region map from the reference** (`prep.py` in each example): colour tests first, then hand polygons for
+   what colour can't separate (a sunlit slope as bright as the sky, a figure, a shadow). Look at an overlay.
+3. **Read coordinates with `tools.gridcrop`** at 4-6x, then place shapes with `Frame.poly` and `Frame.line`.
+4. **Try each part with `tools.fragment`** before running the whole sheet, and compare with `tools.compare`.
+5. **Draw, don't trace, anything made of many small things** (grass, seedlings, thatch, needles): one tapered
+   stroke each, from the helpers in `nature`. Traced, they become blobs. Watch the stroke count: density is
+   the usual mistake.
+6. **Keep black for the few things that should hold the eye.** Too much solid black makes a background part
+   (houses, a grove, mud) jump forward; a dark tone sits back.
+7. **Review area by area at print size**, write the weak spots down, and fix the worst first. Work in the
+   example's folder in the repo from the start, so there is nothing to copy over later.
 
 ## Examples
 

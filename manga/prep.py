@@ -122,3 +122,36 @@ def xdog_lines(rgb, sigma=1.2, k=1.6, p=20.0, eps=-0.02, phi=60.0, tidy=8):
             sz = nd.sum(m, lab, range(1, n + 1))
             ink = ink * np.isin(lab, 1 + np.nonzero(sz >= tidy)[0])
     return ink
+
+
+def ink_contour(sheet, field, level=0.5, min_len=12, keep=None, min_run=4, tol=0.6, simplify_first=False,
+                piece=40, overlap=2, pen='maru', pressure=0.45, style=None, to_page=None, seed=0):
+    """Ink selected stretches of a field's iso-lines as hand-length strokes.
+
+    The common case: a ridge line where sky meets mountain, the lit underside of a cloud, the top edge of a
+    grove. `keep(points) -> bool per point` picks the stretches (None keeps all); runs shorter than min_run
+    points are dropped; long runs are cut into pieces of `piece` points overlapping by `overlap`.
+    simplify_first -- simplify the whole line before selecting (use it when keep looks at the line's normals).
+    style(points) -> (pen, pressure) per run, to vary the weight (e.g. heavier on near ridges).
+    Coordinates are the field's own; `to_page` maps them onto the sheet. Returns the number of strokes.
+    """
+    tp = to_page or (lambda x, y: (x, y))
+    n = 0
+    for Pl in geom.outlines(field, level, min_len):
+        base = geom.simplify(Pl, tol) if simplify_first else Pl
+        if len(base) < 2:
+            continue
+        ok = np.ones(len(base), bool) if keep is None else np.asarray(keep(base), bool)
+        runs = np.split(np.arange(len(base)), np.nonzero(np.diff(ok.astype(int)))[0] + 1)
+        for run in runs:
+            if not ok[run[0]] or len(run) < min_run:
+                continue
+            Q = base[run] if simplify_first else geom.simplify(Pl[run], tol)
+            pn, pr = style(Q) if style else (pen, pressure)
+            pts = [tp(x, y) for x, y in Q[:, :2]]
+            for k in range(0, len(pts) - 1, piece):
+                seg = pts[k:k + piece + overlap]
+                if len(seg) > 1:
+                    sheet.stroke(seg, pen=pn, pressure=pr, seed=seed + n)
+                    n += 1
+    return n

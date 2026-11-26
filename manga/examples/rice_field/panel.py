@@ -24,7 +24,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage as nd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
-from manga import Sheet, tone, hatch, effects, trace, prep, geom
+from manga import Sheet, Frame, tone, hatch, effects, trace, prep, geom, nature, water
 
 W, H, PPM = 2000, 2920, 8.0
 OX, OY = 80, 80
@@ -39,25 +39,8 @@ Z = dict(np.load('zones.npz'))
 YY, XX = np.mgrid[:RH, :RW]
 
 
-def up(a):
-    """A ref-resolution float array, scaled into page coordinates (zeros outside the panel)."""
-    im = Image.fromarray(np.asarray(a, np.float32), 'F').resize((round(RW * S), round(RH * S)), Image.BILINEAR)
-    out = np.zeros((H, W), np.float32)
-    out[OY:OY + im.height, OX:OX + im.width] = np.asarray(im)
-    return out
-
-
-def upm(m):
-    return up(np.asarray(m, np.float32)) > 0.5
-
-
-def P(x, y):
-    return (OX + S * x, OY + S * y)
-
-
-def lay(sh, mask_ref, level_ref, kind='dot', angle=45.0):
-    m = upm(mask_ref)
-    tone(sh, m, level=up(np.where(mask_ref, level_ref, 0)), lpi=LPI, kind=kind, angle=angle)
+FR = Frame((W, H), (RW, RH), (OX, OY), S, lpi=LPI)
+up, upm, P, lay = FR.up, FR.upm, FR.P, FR.lay
 
 
 # ------------------------------------------------------------------ sky
@@ -80,19 +63,9 @@ def sky(sh):
     lv = nd.gaussian_filter(lv, 0.8)
     lay(sh, zone, lv)
     # a thin broken line along the clouds' lower edges, where the low sun lights them
-    f = nd.gaussian_filter(cl.astype(np.float32), 1.0)
-    n = 0
-    for Pl in geom.outlines(f, 0.5, 25):
-        Q = geom.simplify(Pl, 0.5)
-        if len(Q) < 4:
-            continue
-        nrm = geom.normals(Q)
-        low = nrm[:, 1] > 0.35                     # outward normal pointing down: the cloud's underside
-        runs = np.split(np.arange(len(Q)), np.nonzero(np.diff(low.astype(int)))[0] + 1)
-        for run in runs:
-            if low[run[0]] and len(run) >= 4:
-                sh.stroke([P(x, y) for x, y in Q[run]], pen='maru', pressure=0.3, seed=200 + n)
-                n += 1
+    prep.ink_contour(sh, nd.gaussian_filter(cl.astype(np.float32), 1.0), min_len=25, tol=0.5, simplify_first=True,
+                     keep=lambda Q: geom.normals(Q)[:, 1] > 0.35, min_run=4, piece=10 ** 6, pen='maru',
+                     pressure=0.3, to_page=P, seed=200)
 
 
 # ------------------------------------------------------------------ mountains and mist
@@ -114,21 +87,10 @@ def mountains(sh):
     skyf = nd.gaussian_filter((Z['sky'] | Z['cloud'] | Z['sun']).astype(np.float32), 1.0)
     near_m = nd.binary_dilation(far | right, iterations=3)
     near_r = nd.binary_dilation(right, iterations=3)
-    n = 0
-    for Pl in geom.outlines(skyf, 0.5, 12):
-        ok = np.array([near_m[int(min(y, RH - 1)), int(min(x, RW - 1))] and y > 270 for x, y in Pl])
-        runs = np.split(np.arange(len(Pl)), np.nonzero(np.diff(ok.astype(int)))[0] + 1)
-        for run in runs:
-            if not ok[run[0]] or len(run) < 15:
-                continue
-            Q = geom.simplify(Pl[run], 0.6)
-            rr = near_r[int(Q[len(Q) // 2][1]), int(Q[len(Q) // 2][0])]
-            pts = [P(x, y) for x, y in Q]
-            for k in range(0, len(pts) - 1, 40):          # hand-length pieces
-                seg = pts[k:k + 42]
-                if len(seg) > 1:
-                    sh.stroke(seg, pen='saji' if rr else 'maru', pressure=0.35 if rr else 0.45, seed=300 + n)
-                    n += 1
+    inside = lambda m, Q: m[np.minimum(Q[:, 1].astype(int), RH - 1), np.minimum(Q[:, 0].astype(int), RW - 1)]
+    prep.ink_contour(sh, skyf, min_len=12, keep=lambda Q: inside(near_m, Q) & (Q[:, 1] > 270), min_run=15, tol=0.6,
+                     piece=40, style=lambda Q: ('saji', 0.35) if inside(near_r, Q[len(Q) // 2:len(Q) // 2 + 1])[0]
+                     else ('maru', 0.45), to_page=P, seed=300)
 
 
 # ------------------------------------------------------------------ village: trees, pine, houses
@@ -155,14 +117,8 @@ def village(sh):
         front = keep[lab]
     sh.fill(upm(front))
     # a thin line where a darker layer stands in front of a lighter one, so the layers separate
-    for k, (mm, pr) in enumerate([(tr, 0.35)]):
-        f = nd.gaussian_filter(upm(mm).astype(np.float32), 1.5)
-        for j, Pl in enumerate(geom.outlines(f, 0.5, 20)):
-            Q = geom.simplify(Pl, 0.8)
-            for s0 in range(0, len(Q) - 1, 30):
-                seg = Q[s0:s0 + 32]
-                if len(seg) > 1 and seg[:, 1].mean() < P(0, 676)[1]:
-                    sh.stroke(seg, pen='maru', pressure=pr, seed=640 + j * 50 + s0)
+    prep.ink_contour(sh, nd.gaussian_filter(tr.astype(np.float32), 1.0), min_len=12, keep=lambda Q: Q[:, 1] < 676,
+                     min_run=4, tol=0.5, piece=20, pressure=0.35, to_page=P, seed=640)
     pine(sh)
     lay(sh, Z['houses'], np.full(L.shape, 0.5))          # whatever of the old house shapes the drawn ones leave
     for k, hs in enumerate(HOUSES):
@@ -324,42 +280,20 @@ def reflections(sh):
     ImageDraw.Draw(im).polygon([(rx0, ry), (rx1, ry), (ex1, ey), (ex0, ey)], fill=1)
     ImageDraw.Draw(im).rectangle([ex0 + 10, ey, ex1 - 10, hs['wall']], fill=1)
     src = src | trunk | np.asarray(im, bool)
-    # mirror: y' = 760 + (686 - y) * 0.48
-    out = np.zeros_like(src)
-    ys = np.arange(745, 905)
-    sy = np.round(686 - (ys - 760) / 0.48).astype(int)
-    ok = (sy >= 0) & (sy < RH)
-    out[ys[ok]] = src[sy[ok]]
-    w = Z['water'] & REFL_ZONE
-    out &= w
+    out = water.mirror(src, src_line=686, dst_line=760, squash=0.48, rows=(745, 905))
+    out &= Z['water'] & REFL_ZONE
     out = nd.gaussian_filter(out.astype(np.float32), (0.6, 1.2)) > 0.5
-    lay(sh, out, np.full(L.shape, 0.62), kind='line', angle=90.0)
+    lay(sh, out, 0.62, kind='line', angle=water.HORIZONTAL)
     # ripples: broken white lines across the reflection, closer together toward the viewer
-    rng = np.random.default_rng(77)
-    y = 762.0
-    k = 0
-    while y < 900:
-        xs = np.nonzero(out[int(y)])[0]
-        if len(xs):
-            x = xs.min()
-            while x < xs.max():
-                ln = rng.uniform(6, 22)
-                sh.stroke([P(x, y), P(x + ln, y)], pen='white', mode='white', pressure=0.08, taper=(0.5, 0.5),
-                          seed=9000 + k)
-                k += 1
-                x += ln + rng.uniform(10, 26)
-        y += rng.uniform(8, 12) - 3 * (y - 760) / 140
+    water.ripples(sh, out, rows=(762, 900), to_page=P, seed=9000)
 
 
 def paddies(sh, sd):
     w = Z['water'] | Z['shadow'] | sd
     # the water under each tuft takes the water around it (normalized blur over water pixels only)
-    sdd = nd.binary_dilation(sd, iterations=2)
-    ww = ((Z['water'] | Z['shadow']) & ~sdd).astype(np.float32)
-    Lw = nd.gaussian_filter(L * ww, 4) / np.maximum(nd.gaussian_filter(ww, 4), 1e-3)
-    Lw = np.where(sdd, Lw, L)
+    Lw, sdd = water.fill_under(L, Z['water'] | Z['shadow'], sd)
     # calm water: smooth the reflected light hard (the seedling rows must not print into it)
-    lv = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, (2.5, 6.0))), 0, 0.5)
+    lv = water.calm_level(Lw, floor=0)
     # far paddies: smooth hard along the rows, so the strips read as calm bands, not patches
     lvf = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, (1.5, 16.0))), 0, 0.5)
     wf = np.clip((830 - YY) / 60, 0, 1)
@@ -371,7 +305,7 @@ def paddies(sh, sd):
     lv[lv < 0.04] = 0
     core = nd.gaussian_filter(Z['shadow'].astype(np.float32), 3.0)
     lv = np.maximum(lv, np.clip(core * 1.5, 0, 1) * 0.74)
-    lay(sh, w, lv, kind='line', angle=90.0)          # angle 90 = horizontal lines
+    lay(sh, w, lv, kind='line', angle=water.HORIZONTAL)
     glint = (nd.gaussian_filter(Lw, (2.0, 6.0)) > 0.88) & w & ~sdd
     glint = nd.binary_opening(glint, iterations=3) & ~REFL_ZONE
     sh.fill(upm(glint), mode='white')
@@ -424,86 +358,19 @@ def banks(sh, sd):
     return n
 
 
-def blade(sh, x, y, ang, ln, near, seed, bend=0.25):
-    """One grass blade from its root (ref px): curves as it rises, tapers to a point."""
-    tip = (x + np.sin(ang) * ln, y - np.cos(ang) * ln)
-    mid = (x + np.sin(ang) * ln * 0.5 + bend * ln * np.sign(ang) * 0.3, y - np.cos(ang) * ln * 0.55)
-    sh.stroke([P(x, y), P(*mid), P(*tip)], pen='g_pen', pressure=0.16 + 0.24 * near, taper=(0.2, 1.0 + 2.0 * near),
-              seed=seed)
-
-
 def grass(sh, b):
     """Grass on the banks, drawn: blades along the edges (where a bank meets water or path) and tufts inside,
     bigger and denser toward the front."""
     rng = np.random.default_rng(33)
-    k = 0
-    f = nd.gaussian_filter(b.astype(np.float32), 1.0)
-    for Pl in geom.outlines(f, 0.5, 20):
-        Q = geom.resample(Pl, 1.0)[0]
-        nrm = geom.normals(Q)
-        acc = 0.0
-        for q, nv in zip(Q, nrm):
-            x, y = q
-            if y < 860:
-                continue
-            near = np.clip((y - 860) / 860, 0, 1)
-            acc += 1.0
-            if acc < 8.0 - 3.5 * near:
-                continue
-            acc = 0.0
-            lean = np.clip(np.arctan2(nv[0], -nv[1]) * 0.5, -0.9, 0.9)       # toward the open side
-            for j in range(rng.integers(1, 2 + int(1.5 * near) + 1)):
-                ln = (3 + 16 * near) * rng.uniform(0.6, 1.2)
-                blade(sh, x + rng.normal(0, 0.8), y, lean + rng.normal(0, 0.35), ln, near, 20000 + k)
-                k += 1
-    # tufts inside the near banks
-    inner = nd.binary_erosion(b, iterations=3) & (YY > 1000)
-    ys, xs = np.nonzero(inner)
-    near_all = np.clip((ys - 860) / 860, 0, 1)
-    prob = 0.0012 + 0.002 * near_all
-    pick = rng.random(len(xs)) < prob
-    for x, y, near in zip(xs[pick], ys[pick], near_all[pick]):
-        for j in range(3 + int(2 * near)):
-            ln = (4 + 14 * near) * rng.uniform(0.5, 1.1)
-            blade(sh, x + rng.normal(0, 1.2), y, rng.normal(0, 0.45), ln, near, 20000 + k)
-            k += 1
+    depth = lambda y: (y - 860) / 860
+    k = nature.edge_grass(sh, b, depth, P, rng)
+    k += nature.tufts(sh, nd.binary_erosion(b, iterations=3) & (YY > 1000), depth, P, rng, seed=20000 + k)
     return k
 
 
 def seedlings(sh, sd):
     """Each tuft drawn as a few leaves fanning up from its base, with a short broken reflection below."""
-    lab, n = nd.label(sd)
-    rng = np.random.default_rng(41)
-    k = 0
-    for i, sl in enumerate(nd.find_objects(lab), 1):
-        ys, xs = np.nonzero(lab[sl] == i)
-        ys = ys + sl[0].start; xs = xs + sl[1].start
-        top, base_y = ys.min(), ys.max()
-        h = base_y - top + 1
-        if h < 3:
-            continue
-        bx = xs[ys >= base_y - max(1, h * 0.15)].mean()
-        w = xs.max() - xs.min() + 1
-        near = np.clip((base_y - 900) / 800, 0, 1)                 # 0 far .. 1 front
-        nleaf = 2 + (h > 10) + (h > 22) + (h > 40)
-        spread = np.clip(0.6 * w / h, 0.25, 0.9)
-        for j in range(nleaf):
-            t = (j + 0.5) / nleaf * 2 - 1
-            a = t * spread + rng.normal(0, 0.08)
-            ln = h * rng.uniform(0.75, 1.05) * (1 - 0.25 * abs(t))
-            tip = (bx + np.sin(a) * ln, base_y - np.cos(a) * ln)
-            mid = (bx + np.sin(a * 0.6) * ln * 0.5, base_y - np.cos(a * 0.6) * ln * 0.5)
-            pts = [P(bx + rng.normal(0, 0.3), base_y), P(*mid), P(*tip)]
-            sh.stroke(pts, pen='g_pen', pressure=0.25 + 0.4 * near, taper=(0.1, 1.2 + 1.5 * near), seed=900 + k)
-            k += 1
-        if h > 8:                                                   # the reflection: two or three broken lines
-            for j in range(2 + (h > 25)):
-                a = (j - 1) * spread * 0.7
-                ln = h * rng.uniform(0.35, 0.55)
-                pts = [P(bx + np.sin(a) * 2, base_y + 2), P(bx + np.sin(a) * ln, base_y + np.cos(a) * ln)]
-                sh.stroke(pts, pen='maru', pressure=0.35, taper=(0.3, 1.0), seed=5000 + k)
-                k += 1
-    return k
+    return nature.seedlings(sh, sd, lambda y: (y - 900) / 800, P, seed=41)
 
 
 def path(sh):
@@ -536,21 +403,15 @@ SOLES = [[(672, 1219), (684, 1218), (682, 1226), (674, 1227)], [(689, 1222), (69
 SWORDS = [[(669, 1081), (673, 1085), (637, 1143), (632, 1140)], [(705, 1081), (710, 1080), (733, 1147), (728, 1150)]]
 
 
-def pm(poly, closed=True):
-    im = Image.new('L', (W, H), 0)
-    ImageDraw.Draw(im).polygon([P(*q) for q in geom.catmull(np.array(poly + poly[:1], float), 6)], fill=1)
-    return np.asarray(im, bool)
+def pm(poly):
+    return FR.poly(poly, smooth=6)
 
 
-def line(pts, pen='g_pen', pressure=0.45, mode='ink', seed=0, per=8, taper=None):
-    Q = geom.catmull(np.array(pts, float), per) if len(pts) > 2 else np.array(pts, float)
-    sh_.stroke([P(*q) for q in Q], pen=pen, pressure=pressure, mode=mode, seed=seed, taper=taper)
+def line(pts, pen='g_pen', pressure=0.45, **kw):
+    FR.line(sh_, pts, pen=pen, pressure=pressure, **kw)
 
 
-def disc(c, r):
-    yy, xx = np.mgrid[:H, :W]
-    cx, cy = P(*c)
-    return (xx - cx) ** 2 + (yy - cy) ** 2 < (r * S) ** 2
+disc = FR.disc
 
 
 def walker(sh):
