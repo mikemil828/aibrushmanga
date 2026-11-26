@@ -93,4 +93,9 @@ ImageDraw.Draw(_gp).polygon([(354, 1005), (356, 1040), (357, 1080), (356, 1120),
                              (359, 1185), (362, 1170), (365, 1145), (369, 1115), (375, 1085), (377, 1060),
                              (372, 1030), (362, 1005)], fill=1)
 mat[np.asarray(_gp, bool)] = 0
+# the sky seen between her raised upper arm and her shoulder was read as scales
+_ap = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_ap).polygon([(660, 560), (805, 540), (820, 575), (840, 615), (860, 655), (876, 696), (860, 698),
+                             (800, 652), (730, 611), (660, 611)], fill=1)
+mat[np.asarray(_ap, bool) & (mat == 3)] = 0
 np.save('mat.npy', mat)
