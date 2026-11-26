@@ -49,6 +49,12 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 - `examples/pool_page/`: a four-panel manga page drawn from a reference illustration (see its README). This is
   the recommended way to work: start from a reference image.
 
+## Tests
+
+`python3 -m pytest manga/tests -q` (about 5 s). They check that strokes land where they should at the right
+width in mm, that flat tones cover the right share of paper, that clips and white-out work, and that a journal
+replays to the same sheet at x1 and x2. GitHub runs them on every push that touches `manga/`.
+
 ## What it can't do yet
 
 - Real photos are not supported yet (planned for later).
