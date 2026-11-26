@@ -9,6 +9,7 @@ from PIL import Image
 from scipy import ndimage as nd
 from manga import tone, trace, prep, geom
 import eyes_hand
+import hair as hair_mod
 EYEZONE = eyes_hand.eye_region(MAT.shape[1] if False else 1080, 1920, pad=7)
 
 REF = Image.open('../ref.png').convert('RGB')
@@ -66,7 +67,7 @@ def cel(d, m, base, shadow, delta, sigma, min_area):
 
 def draw_figure(sh, box, crop, opt=None):
     o = dict(skin=(0.30, 0.52, 0.06), suit=(0.0, 0.14, 0.09), scales=(0.10, 0.28, 0.08), contour_w=2.2, inner_w=1.0,
-             inner_min=10, white_edge=1, blush=True, strands=0.6)
+             inner_min=10, white_edge=1, blush=True, strands=0.6, hair_density=0.10)
     o.update(opt or {})
     rgb, mat, to_page, s = source(box, crop)
     X0, Y0, X1, Y1 = box
@@ -110,45 +111,11 @@ def draw_figure(sh, box, crop, opt=None):
     # 3. inner lines: maru, light; skip texture scraps on the skin
     n_in, _ = trace.ink_line_art(sh, place(sh, inner, box), pens=('maru', 'maru'), weight=o['inner_w'],
                                  min_len_px=o['inner_min'] * s, seed=11, min_px=1.0)
-    # 4. hair: black, gloss scraped back, a few strands in white
+    # 4. hair: strands that follow the flow over a mid tone, black in the deepest shadow, paper where it shines
     if hair.any():
-        sh.fill(place(sh, hair, box))
-        med = np.median(ds[hair])
-        gloss = nd.binary_opening(hair & (ds < med - 0.22), iterations=max(1, int(s)))
-        # keep only streak-like shine (long and thin, along the strands); round blobs read as holes
-        lab, n = nd.label(gloss)
-        keepg = np.zeros(n + 1, bool)
-        for i, sl in enumerate(nd.find_objects(lab), 1):
-            ys, xs = np.nonzero(lab[sl] == i)
-            if len(ys) < 6:
-                continue
-            ev = np.linalg.eigvalsh(np.cov(np.vstack([xs, ys])) + 1e-6 * np.eye(2))
-            keepg[i] = ev[1] / max(ev[0], 1e-6) > 9.0
-        gloss = keepg[lab] & False             # the shine is drawn by hand below instead
-        ring = geom.catmull(np.array([(392, 285), (425, 243), (475, 222), (530, 222), (582, 242), (612, 280)], float), per=10)
-        rng2 = np.random.default_rng(21)
-        for i, (qx, qy) in enumerate(ring[2:-2:2]):
-            vx, vy = qx - 500, qy - 380
-            nv = np.hypot(vx, vy); vx, vy = vx / nv, vy / nv
-            Lr = rng2.uniform(9, 20) * (0.6 if i % 3 == 1 else 1.0)
-            off = rng2.uniform(-3, 3)
-            a = to_page(qx + vx * (off + Lr * 0.5), qy + vy * (off + Lr * 0.5))
-            b = to_page(qx - vx * (Lr * 0.5 - off), qy - vy * (Lr * 0.5 - off))
-            if not (X0 <= a[0] <= X1 and Y0 <= a[1] <= Y1):
-                continue
-            sh.stroke([a, b], pen='white', pressure=0.18 + 0.12 * rng2.random(), mode='white',
-                      taper=(0.5 * s, 0.9 * s), smooth=False, seed=int(rng2.integers(1 << 30)))
-        strands = lines & nd.binary_erosion(hair, iterations=int(3 * s)) & ~gloss
-        rng = np.random.default_rng(5)
-        n_st = 0
-        for pts, a, b in trace.trace(trace.thin(strands)):
-            if len(pts) < 2 or geom.arclen(pts)[-1] < 25 * s or rng.random() > o['strands'] \
-                    or np.hypot(*(pts[0] - pts[-1])) < 0.3 * geom.arclen(pts)[-1]:
-                continue
-            Q = geom.simplify(pts, 0.8) + [X0, Y0]
-            sh.stroke(Q, pen='white', pressure=0.06 * s, mode='white', taper=(0.8 * s, 1.6 * s),
-                      seed=int(rng.integers(1 << 30)))
-            n_st += 1
+        cx, cy = to_page(505, 160)
+        hair_mod.draw_hair(sh, hair, rgb.mean(2), lines, box, s, style='tone', density=o['hair_density'],
+                           root=np.array([cx - X0, cy - Y0]), deep_at=0.88)
     # 5. contour: G-pen, the heaviest line on the figure
     n_c, _ = trace.ink_line_art(sh, place(sh, contour, box), pens=('g_pen', 'g_pen'), weight=o['contour_w'],
                                 min_len_px=6 * s, seed=12, min_px=1.6 * s)
