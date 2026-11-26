@@ -40,11 +40,12 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 ## Examples
 
 - `examples/sampler.py`: every tool on one sheet.
-- `examples/fenway_page.py`: a four-panel manga page drawn from a photo of Fenway Park. The planning notes are at the top of the file.
+- `examples/pool_page/`: a four-panel manga page drawn from an anime illustration used as reference (see its README).
 
 ## What it can't do yet
 
-- Figures drawn from photos are the weak point. Contours come from colour classes plus an XDoG line map, so faces and hands read as shapes, not as drawn anatomy. A real inker simplifies far more.
+- Real photos are not supported yet (planned for later).
+- Figures traced from a reference are the weak point. Contours come from colour classes plus an XDoG line map, so faces and hands read as shapes, not as drawn anatomy. A real inker simplifies far more.
 - Hatching follows straight rows, or a direction field without spacing control, so curved hatching can bunch up.
 - There is no lettering beyond simple caption boxes: no speech balloons and no vertical text yet.
 - Tone is laid flat. There is no moiré check when two dot tones overlap at different angles.
