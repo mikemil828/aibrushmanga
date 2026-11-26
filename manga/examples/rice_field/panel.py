@@ -138,28 +138,84 @@ def village(sh):
     lay(sh, t & ~blk, np.full(L.shape, 0.62))
     sh.fill(upm(blk))
     sh.fill(upm(Z['pine']))
-    h = Z['houses']
-    hp = upm(h)
-    sh.fill(nd.binary_dilation(hp, iterations=3) & ~hp, mode='white')     # keep roofs off the black trees
-    win = h & (ref[..., 0] > 0.55) & (ref[..., 1] > 0.42) & (ref[..., 2] < 0.5)
-    wall = h & (Ls < 0.26) & ~win
-    roof = h & ~wall & ~win
-    lay(sh, roof, np.clip(0.55 - 0.5 * (Ls - 0.35), 0.25, 0.6))
-    sh.fill(upm(nd.binary_opening(wall, iterations=1)))
-    # thatch: short strokes down the roof
-    rng = np.random.default_rng(5)
-    rm = upm(roof)
-    ys, xs = np.nonzero(rm)
-    pick = rng.choice(len(xs), size=min(len(xs) // 90, 900), replace=False)
-    for i in pick:
-        x, y = xs[i], ys[i]
-        ln = rng.uniform(5, 11)
-        if rm[min(int(y + ln), H - 1), x]:
-            sh.stroke([(x, y), (x + rng.uniform(-1.5, 1.5), y + ln)], pen='maru', pressure=0.5, seed=int(i))
-    prep.ink_outline(sh, upm(roof | wall), pen='maru', pressure=(0.4, 0.7), seed=8)
-    lit = roof & (ref[..., 0] - ref[..., 2] > 0.18) & (Ls > 0.45)
-    sh.fill(upm(lit), mode='white')
-    sh.fill(upm(win), mode='white')
+    lay(sh, Z['houses'], np.full(L.shape, 0.5))          # whatever of the old house shapes the drawn ones leave
+    for k, hs in enumerate(HOUSES):
+        house(sh, hs, k)
+
+
+# Thatched farmhouses read off the reference (ref px): ridge (x0, x1, y), eaves (x0, x1, y), wall bottom,
+# windows [(x0, x1)] lit, chimney (x0, x1, top) or None, crossed sticks on the ridge, sunlit slope ('l'/'r'/None),
+# and how far back it sits (0 near .. 1 in the mist).
+HOUSES = [
+    dict(ridge=(78, 147, 585), eave=(28, 196, 653), wall=683, win=[(61, 73), (84, 97), (99, 114), (155, 170)],
+         chim=(112, 123, 566), sticks=True, lit='r', mist=0.0),
+    dict(ridge=(-10, 4, 612), eave=(-10, 26, 650), wall=684, win=[], chim=None, sticks=False, lit='r', mist=0.0),
+    dict(ridge=(262, 318, 617), eave=(247, 334, 650), wall=666, win=[], chim=None, sticks=False, lit=None, mist=0.7),
+    dict(ridge=(891, 913, 659), eave=(884, 920, 668), wall=674, win=[], chim=None, sticks=False, lit=None, mist=0.3),
+    dict(ridge=(946, 990, 644), eave=(928, 1002, 662), wall=676, win=[(943, 949), (976, 983)], chim=None,
+         sticks=False, lit=None, mist=0.2),
+    dict(ridge=(1026, 1078, 637), eave=(1006, 1110, 660), wall=678, win=[(1030, 1040), (1072, 1083)], chim=None,
+         sticks=True, lit=None, mist=0.1),
+]
+
+
+def house(sh, d, k):
+    (rx0, rx1, ry), (ex0, ex1, ey) = d['ridge'], d['eave']
+    wb = d['wall']
+    inset = (ex1 - ex0) * 0.06
+    roof = [(rx0, ry), (rx1, ry), (ex1, ey), (ex0, ey)]
+    wall = [(ex0 + inset, ey - 1), (ex1 - inset, ey - 1), (ex1 - inset, wb), (ex0 + inset, wb)]
+    pr = [P(*q) for q in roof]; pw = [P(*q) for q in wall]
+    im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon(pr, fill=1); rm = np.asarray(im, bool)
+    im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon(pw, fill=1); wm = np.asarray(im, bool)
+    both = rm | wm
+    if d['chim']:
+        cx0, cx1, ct = d['chim']
+        im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).rectangle([P(cx0, ct), P(cx1, ry + 2)], fill=1)
+        cm = np.asarray(im, bool); both |= cm
+    mist = d['mist']
+    sh.fill(nd.binary_dilation(rm, iterations=2) & ~nd.binary_dilation(wm, iterations=1) | both, mode='white')
+    # walls dark (black near, tone in the mist), lit windows left white
+    if mist < 0.5:
+        sh.fill(wm)
+    else:
+        tone(sh, wm, level=0.55, lpi=LPI)
+    for (wx0, wx1) in d['win']:
+        a, b = P(wx0, ey + 1.5), P(wx1, min(ey + 9, wb - 3))
+        im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).rectangle([a, b], fill=1)
+        sh.fill(np.asarray(im, bool), mode='white')
+        for t in np.linspace(wx0, wx1, 4)[1:-1]:                        # window bars
+            sh.stroke([P(t, ey + 1.5), P(t, min(ey + 9, wb - 3))], pen='maru', pressure=0.25, taper=(0, 0))
+    if mist < 0.5 and wb - ey > 10:                                     # the wall's timber rail, scraped
+        sh.stroke([P(ex0 + inset + 1, ey + 15), P(ex1 - inset - 1, ey + 15)], pen='white', mode='white',
+                  pressure=0.12, taper=(0, 0))
+    # thatch: a mid tone, darker along the eaves, straws from ridge to eave
+    tone(sh, rm, level=0.32 - 0.12 * mist, lpi=LPI)
+    eb = [(ex0 + (rx0 - ex0) * 0.15, ey - (ey - ry) * 0.15), (ex1 - (ex1 - rx1) * 0.15, ey - (ey - ry) * 0.15),
+          (ex1, ey), (ex0, ey)]
+    im = Image.new('L', (W, H), 0); ImageDraw.Draw(im).polygon([P(*q) for q in eb], fill=1)
+    tone(sh, np.asarray(im, bool), level=0.55 - 0.2 * mist, lpi=LPI)
+    rng = np.random.default_rng(300 + k)
+    n = int((ex1 - ex0) / (2.2 + 3 * mist))
+    for t in np.linspace(0.02, 0.98, n):
+        top = (rx0 + (rx1 - rx0) * t + rng.normal(0, 0.4), ry + rng.uniform(0, (ey - ry) * 0.25))
+        bot = (ex0 + (ex1 - ex0) * t, ey - rng.uniform(0, (ey - ry) * 0.2))
+        sh.stroke([P(*top), P(*bot)], pen='maru', pressure=0.3 - 0.15 * mist, taper=(0.5, 0.3), seed=4000 + k * 100)
+    if d['lit']:                                                        # the slope catching the low sun
+        a, b = ((rx1, ry), (ex1, ey)) if d['lit'] == 'r' else ((rx0, ry), (ex0, ey))
+        sh.stroke([P(a[0] - 1.5, a[1] + 1), P(b[0] - 2, b[1] - 1)], pen='white', mode='white', pressure=0.45)
+    if d['chim']:
+        sh.fill(cm)
+    if d['sticks']:                                                     # crossed sticks holding the ridge
+        for t in np.linspace(0.15, 0.85, 4):
+            x = rx0 + (rx1 - rx0) * t
+            sh.stroke([P(x - 4, ry - 5), P(x + 3, ry + 3)], pen='g_pen', pressure=0.35)
+            sh.stroke([P(x + 4, ry - 5), P(x - 3, ry + 3)], pen='g_pen', pressure=0.35)
+    pen, pr_ = ('maru', 0.5) if mist > 0.5 else ('g_pen', 0.35)
+    sh.stroke([P(*q) for q in roof + roof[:1]], pen=pen, pressure=pr_, taper=(0, 0), smooth=False)
+    if mist < 0.5:
+        sh.stroke([P(*q) for q in [wall[1], wall[2], wall[3], wall[0]]], pen=pen, pressure=pr_, taper=(0, 0),
+                  smooth=False)
 
 
 # ------------------------------------------------------------------ paddies, banks, path
@@ -192,9 +248,10 @@ def seedlings_mask():
 def paddies(sh, sd):
     w = Z['water'] | Z['shadow'] | sd
     # the water under each tuft takes the water around it (normalized blur over water pixels only)
-    ww = (Z['water'] | Z['shadow']).astype(np.float32)
+    sdd = nd.binary_dilation(sd, iterations=2)
+    ww = ((Z['water'] | Z['shadow']) & ~sdd).astype(np.float32)
     Lw = nd.gaussian_filter(L * ww, 4) / np.maximum(nd.gaussian_filter(ww, 4), 1e-3)
-    Lw = np.where(sd, Lw, L)
+    Lw = np.where(sdd, Lw, L)
     lv = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, 2.5)), 0, 0.5)
     lv[lv < 0.04] = 0
     core = nd.gaussian_filter(Z['shadow'].astype(np.float32), 3.0)
@@ -224,9 +281,9 @@ def paddies(sh, sd):
 
 def banks(sh, sd):
     b = Z['levee'] & ~sd
-    Lb = nd.gaussian_filter(L, 2.0)
-    lv = np.where(Lb > 0.42, 0.28, 0.52)
-    lv = np.where(Lb < 0.22, 0.7, lv)
+    Lb = nd.gaussian_filter(L, 4.0)
+    lv = np.where(Lb > 0.40, 0.26, 0.5)
+    lv = np.where(Lb < 0.2, 0.66, lv)
     lay(sh, b, lv)
     n = grass(sh, b)
     dew = b & (L > 0.72) & (YY > 1000)
@@ -270,7 +327,7 @@ def grass(sh, b):
     inner = nd.binary_erosion(b, iterations=3) & (YY > 1000)
     ys, xs = np.nonzero(inner)
     near_all = np.clip((ys - 860) / 860, 0, 1)
-    prob = 0.0012 + 0.0035 * near_all
+    prob = 0.0012 + 0.002 * near_all
     pick = rng.random(len(xs)) < prob
     for x, y, near in zip(xs[pick], ys[pick], near_all[pick]):
         for j in range(3 + int(2 * near)):
