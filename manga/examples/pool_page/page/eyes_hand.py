@@ -1,7 +1,7 @@
 """The eyes, drawn by hand from points read off the reference (ref px). The face lives or dies by these."""
 import numpy as np
 from PIL import Image, ImageDraw
-from manga import geom, tone
+from manga import geom, tone, face
 
 
 # Read off the reference at 8x (ref px). lid = lower edge of the lash band (where the eye opening starts),
@@ -258,8 +258,6 @@ def draw_cheek_scales(sh, to_page, s, face=None):
 MOUTH_ZONE = [(438, 449), (488, 444), (532, 453), (526, 482), (490, 512), (452, 488)]
 # the smile: corners lifted, the middle a little lower, tilted with her head (the eye line drops ~7 deg right)
 SMILE = [(455, 459), (466, 466), (480, 470), (495, 471), (508, 468), (518, 462)]
-SMILE_TICKS = [((455, 459), (451, 455)), ((518, 462), (522, 457))]
-LOWER_LIP = [(478, 482), (487, 484), (497, 483)]
 
 
 def mouth_region(W, H):
@@ -269,48 +267,16 @@ def mouth_region(W, H):
 
 
 def draw_closed_eyes(sh, to_page, s):
-    """Closed, content eyes: the lid line bows downward like a soft smile from corner to corner, a lash band that
-    thickens toward the outer corner, three short lashes sweeping down and out there, and a thin crease above."""
-    rng = np.random.default_rng(32)
+    """Closed, content eyes from the engine's face module, between each eye's own corners."""
     for e in EYES:
         lid, low = np.array(e['lid'], float), np.array(e['lower'], float)
         inner, outer = (lid[0], lid[-1]) if e['outer'] == 1 else (lid[-1], lid[0])
-        outer = outer + (outer - inner) / np.hypot(*(outer - inner)) * 4      # the closed eye reads a touch wider
-        d = outer - inner; L = np.hypot(*d); t_ = d / L; nrm = np.array([-t_[1], t_[0]])
-        if nrm[1] < 0:
-            nrm = -nrm                                                       # "down" on her tilted face
-        sag = 0.45 * (low[:, 1].mean() - lid[:, 1].mean())
-        u = np.linspace(0, 1, 40)                                            # 0 inner .. 1 outer
-        base = inner[None, :] + u[:, None] * d[None, :] + (sag * np.sin(np.pi * u ** 0.9))[:, None] * nrm[None, :]
-        thick = (1.0 + 3.6 * u ** 1.3) * (1 - 0.6 * np.clip((u - 0.9) / 0.1, 0, 1))
-        band = np.vstack([base - 0.5 * thick[:, None] * nrm, (base + 0.5 * thick[:, None] * nrm)[::-1]])
-        Pb = [to_page(x, y) for x, y in band]
-        sh.fill(Pb)
-        Pl = np.array([to_page(x, y) for x, y in base])
-        sh.stroke(np.column_stack([Pl, 0.35 + 0.5 * u]), pen='g_pen', taper=(0.8, 0.3))
-        # lashes at the outer corner, falling down and outward
-        for k, (uu, ang, ln) in enumerate([(0.78, 0.55, 8.0), (0.89, 0.85, 10.0), (0.99, 1.15, 11.0)]):
-            p = base[int(uu * 39)] + 0.4 * thick[int(uu * 39)] * nrm
-            dirv = np.cos(ang) * t_ + np.sin(ang) * nrm
-            q1 = p + dirv * ln * 0.55 + t_ * 0.8
-            q2 = p + dirv * ln + t_ * 2.0
-            sh.stroke([to_page(*p), to_page(*q1), to_page(*q2)], pen='g_pen', pressure=0.6, taper=(0.0, 1.2),
-                      seed=int(rng.integers(1 << 30)))
-        # the crease: a thin broken arc above the lid, following its bow
-        cu = np.linspace(0.18, 0.86, 20)
-        cr = inner[None, :] + cu[:, None] * d[None, :] + (sag * 0.6 * np.sin(np.pi * cu) - 9)[:, None] * nrm[None, :]
-        sh.stroke(np.column_stack([[to_page(x, y) for x, y in cr], np.full(len(cr), 0.3)]), pen='maru',
-                  taper=(1.0, 1.4))
+        face.closed_eye(sh, inner, outer, to_page, sag=0.45 * (low[:, 1].mean() - lid[:, 1].mean()))
 
 
 def draw_smile(sh, to_page, s):
-    """A closed, content smile: one line with lifted corners, tiny tucks at each end and a hint of the lower lip."""
-    sm = geom.catmull(np.array([to_page(x, y) for x, y in SMILE], float), per=8)
-    uu = np.linspace(0, 1, len(sm))
-    sh.stroke(np.column_stack([sm, 0.45 + 0.35 * np.sin(np.pi * uu)]), pen='g_pen', taper=(0.6, 0.6))
-    for a, b in SMILE_TICKS:
-        sh.stroke([to_page(*a), to_page(*b)], pen='maru', pressure=0.4, taper=(0.2, 1.0), smooth=False)
-    sh.stroke([to_page(x, y) for x, y in LOWER_LIP], pen='maru', pressure=0.3, taper=(1.0, 1.0))
+    """A closed, content smile."""
+    face.closed_smile(sh, SMILE, to_page)
 
 
 def face_redraw_region(W, H, pad=7):

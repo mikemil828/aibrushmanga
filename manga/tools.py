@@ -61,3 +61,42 @@ def compare(drawn, ref, box_drawn, box_ref, out=None, height=600):
     if out:
         c.save(out)
     return c
+
+
+def pin(page, x_pct, y_pct, size=500, ref=None, to_ref=None, out=None, height=600):
+    """The area round a review comment pinned at (x_pct, y_pct) percent of the page, and, given `ref` and a
+    page->ref mapping `to_ref(x, y)`, the same area of the reference beside it. Returns (image, page box).
+    Comments come pinned as "68% from the left, 76% from the top": this is the first look at every one."""
+    im = _img(page).convert('RGB')
+    cx, cy = im.width * x_pct / 100, im.height * y_pct / 100
+    h = size / 2
+    box = tuple(int(round(v)) for v in (max(0, cx - h), max(0, cy - h), min(im.width, cx + h), min(im.height, cy + h)))
+    if ref is None or to_ref is None:
+        c = im.crop(box)
+        if out:
+            c.save(out)
+        return c, box
+    (rx0, ry0), (rx1, ry1) = to_ref(box[0], box[1]), to_ref(box[2], box[3])
+    rbox = tuple(int(round(v)) for v in (min(rx0, rx1), min(ry0, ry1), max(rx0, rx1), max(ry0, ry1)))
+    return compare(im, ref, box, rbox, out=out, height=height), box
+
+
+def cut_parts(mask, kept, min_px=30):
+    """What a cut takes away: `mask` is a figure before the cut, `kept` the part that survives (both bool, same
+    shape). Returns one dict per piece of the figure that the cut touches, largest loss first:
+    {'lost': px removed, 'kept': px left, 'bbox': (x0, y0, x1, y1) of the removed part}. A piece that keeps most
+    of itself but loses its end is usually a finger, a foot or a tail the cut sawed off, and wants a look."""
+    from scipy import ndimage as nd
+    lab, n = nd.label(mask)
+    gone = mask & ~kept
+    out = []
+    for i, sl in enumerate(nd.find_objects(lab), 1):
+        piece = lab[sl] == i
+        lost = int((gone[sl] & piece).sum())
+        if lost < min_px:
+            continue
+        ys, xs = np.nonzero(gone[sl] & piece)
+        out.append(dict(lost=lost, kept=int((kept[sl] & piece).sum()),
+                        bbox=(int(xs.min() + sl[1].start), int(ys.min() + sl[0].start),
+                              int(xs.max() + sl[1].start + 1), int(ys.max() + sl[0].start + 1))))
+    return sorted(out, key=lambda d: -d['lost'])

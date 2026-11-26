@@ -45,7 +45,8 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 | `Frame` | A reference image placed on the page. `P`/`pts` map reference px to page px, `up`/`upm` scale arrays and masks, `lay` lays tone from reference-sized masks and levels, `poly`/`disc`/`line` draw hand-placed shapes given in reference px. |
 | `nature` | Drawn vegetation: `blade`, `edge_grass` (blades along a bank's edges, leaning outward), `tufts`, `seedlings` (plants in water, with reflections). `depth(y)` sets size and density by distance. |
 | `water` | Still water: `calm_level` (line tone without streaks from things standing in it), `fill_under` (no halos around them), `mirror` (reflections), `ripples`. Use `angle=water.HORIZONTAL` for line tone. |
-| `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference). |
+| `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference), `pin` (the page round a review comment pinned at x%, y%, beside the same area of the reference), `cut_parts` (what a panel edge or cut takes off a figure: a sawn-off finger shows up as a small loss from a big piece). |
+| `face` | Expression changes drawn by hand: `closed_eye` (a content closed eye between two corners) and `closed_smile`. Paint the old eye or mouth over with the skin's own tone first. |
 | `replay` | `python -m manga.replay journal.jsonl --scale S --out file.png [--bw] [--until N]` |
 
 ## Workflow that has worked
@@ -65,6 +66,20 @@ Learned on the pool page and the rice-field panel.
    (houses, a grove, mud) jump forward; a dark tone sits back.
 7. **Review area by area at print size**, write the weak spots down, and fix the worst first. Work in the
    example's folder in the repo from the start, so there is nothing to copy over later.
+
+Learned from review comments on the pool page:
+
+8. **Start each comment with `tools.pin`.** It turns "68% from the left, 76% from the top" into the drawn area
+   beside the reference, so you see at once whether the drawing or the reference is the odd one out.
+9. **Check every cut with `tools.cut_parts`.** Leaving part of a figure out of a panel (a face sliver at the edge)
+   can saw off something that belongs to the beat (the thumb). Look at each piece it reports.
+10. **Look at the reference before closing a gap.** A fill that tidies an ugly cut-out may hide something real (the
+   deck between her legs). If the cut-out looks bad, redraw the background through it instead.
+11. **Fix in reference coordinates, not page pixels.** A fix keyed to page pixels breaks when the layout moves and
+   can't be reused in another panel showing the same thing. Edit the material map, or map points with
+   `to_page`/`Frame`.
+12. **Keep hand-drawn features as data.** The eyes are point lists, so closing them was one switch (`content=True`)
+   and an erase of that zone. A traced feature would have needed redrawing from scratch.
 
 ## Examples
 

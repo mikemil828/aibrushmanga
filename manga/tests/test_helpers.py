@@ -115,3 +115,36 @@ def test_tools_gridcrop_fragment_compare(tmp_path):
     assert c.size == (100, 60) and np.asarray(c.convert('L')).mean() < 50
     cmp_ = tools.compare(c, im, (0, 0, 100, 60), (0, 0, 100, 60), height=60)
     assert cmp_.size[1] == 60
+
+
+def test_tools_pin_crops_round_the_comment(tmp_path):
+    from PIL import Image
+    page = Image.new('RGB', (1000, 2000), (255, 255, 255))
+    c, box = tools.pin(page, 50, 25, size=200)
+    assert box == (400, 400, 600, 600) and c.size == (200, 200)
+    ref = Image.new('RGB', (500, 1000), (0, 0, 0))
+    c2, _ = tools.pin(page, 50, 25, size=200, ref=ref, to_ref=lambda x, y: (x / 2, y / 2), height=100,
+                      out=str(tmp_path / 'p.png'))
+    assert c2.height == 100 and (tmp_path / 'p.png').exists()
+
+
+def test_tools_cut_parts_finds_a_sawn_off_finger():
+    m = np.zeros((100, 100), bool)
+    m[40:90, 40:90] = True                       # palm
+    m[60:66, 10:40] = True                       # thumb reaching left
+    kept = m.copy(); kept[:, :30] = False        # a cut at x=30 takes the thumb's end
+    parts = tools.cut_parts(m, kept, min_px=10)
+    assert len(parts) == 1
+    assert parts[0]['lost'] == 6 * 20 and parts[0]['bbox'] == (10, 60, 30, 66)
+    assert tools.cut_parts(m, m) == []
+
+
+def test_face_closed_eye_and_smile_ink_where_asked():
+    from manga import face
+    sh = Sheet(400, 300, px_per_mm=8)
+    line = face.closed_eye(sh, (100, 100), (200, 110), to_page=lambda x, y: (x, y), sag=10)
+    assert sh.ink[95:125, 100:200].sum() > 100
+    assert sh.ink[:80].sum() < 1                 # nothing far above the eye
+    assert line[len(line) // 2][1] > 105         # the lid bows downward
+    face.closed_smile(sh, [(120, 200), (150, 212), (180, 202)], to_page=lambda x, y: (x, y))
+    assert sh.ink[195:230, 110:190].sum() > 30
