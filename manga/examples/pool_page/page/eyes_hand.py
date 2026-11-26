@@ -35,6 +35,29 @@ CHEEKS = [
 ]
 
 
+def _mirror_right_to_left(R, mx=495.0, dy=-17.0):
+    M = lambda pts: [(2 * mx - x, y + dy) for x, y in pts]                 # noqa: E731
+    L = dict(R)
+    for key in ('lid', 'lash', 'crease', 'lower'):
+        L[key] = M(R[key])[::-1]
+    L['wing'] = [M(w) for w in R['wing']]
+    L['spikes'] = [(2 * mx - x, y + dy, np.pi - a) for x, y, a in R['spikes']]
+    L['lower_lash'] = [(2 * mx - x, y + dy, ln) for x, y, ln in R['lower_lash']]
+    L['iris'] = (2 * mx - R['iris'][0], R['iris'][1] + dy) + tuple(R['iris'][2:])
+    L['pupil'] = (2 * mx - R['pupil'][0], R['pupil'][1] + dy) + tuple(R['pupil'][2:])
+    L['outer'] = 0
+    return L
+
+
+# the left eye was drawn a different shape from the right one; it now mirrors the right eye
+EYES[0] = _mirror_right_to_left(EYES[1])
+
+# catch-lights placed on the iris itself (fractions of its radii), the same for both eyes: the light comes
+# from the upper left, so they are not mirrored
+LIGHTS = [(-0.44, -0.18, 0.26, 0.18), (0.18, -0.28, 0.10, 0.10)]
+GLINT = (0.38, 0.42, 0.065)
+
+
 def eye_region(W, H, pad=0):
     """Where the hand-drawn eyes go (ref px): traced lines and hair are kept out of it."""
     im = Image.new('L', (W, H), 0)
@@ -125,18 +148,14 @@ def draw_eyes(sh, to_page, s, style='detailed', iris_scale=None):
         with sh.clip(open_m):
             sh.fill([tuple(p) for p in _ell(px, py, e['pupil'][2] * s * k, e['pupil'][3] * s * k)])
             # 5. catch-lights: a big one over the iris edge, a small one by the pupil, a glint below
-            for lx, ly, lrx, lry in e['lights']:
-                qx, qy = to_page(lx, ly)
-                ix, iy = to_page(*e['iris'][:2])
-                qx, qy = ix + (qx - ix) * k, iy + (qy - iy) * k + (k - 1) * 2 * s
-                sh.fill([tuple(p) for p in _ell(qx, qy, lrx * s * k, lry * s * k, rot=-0.35)], mode='white')
-                sh.stroke(_ell(qx, qy, lrx * s * k, lry * s * k, 60, rot=-0.35), pen='maru', pressure=0.15,
+            for fx, fy, frx, fry in LIGHTS:
+                qx, qy = cx + fx * rx, cy + fy * ry
+                sh.fill([tuple(p) for p in _ell(qx, qy, frx * rx, fry * rx, rot=-0.35)], mode='white')
+                sh.stroke(_ell(qx, qy, frx * rx, fry * rx, 60, rot=-0.35), pen='maru', pressure=0.15,
                           taper=(0, 0))
             if style == 'detailed':
-                gx, gy = to_page(*e['glint'][:2])
-                ix, iy = to_page(*e['iris'][:2])
-                gx, gy = ix + (gx - ix) * k, iy + (gy - iy) * k
-                sh.fill([tuple(p) for p in _ell(gx, gy, e['glint'][2] * s, e['glint'][2] * s)], mode='white')
+                gx, gy = cx + GLINT[0] * rx, cy + GLINT[1] * ry
+                sh.fill([tuple(p) for p in _ell(gx, gy, GLINT[2] * rx, GLINT[2] * rx)], mode='white')
         # 6. lash band: solid black between lid and lash line, the wing sweeping past the corner
         lash = sm(e['lash'])
         n = min(len(lid), len(lash)); lid_, lash_ = lid[:n], lash[:n]
