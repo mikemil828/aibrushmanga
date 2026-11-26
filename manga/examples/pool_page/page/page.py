@@ -165,6 +165,22 @@ with sh.clip(pmask(P3)):
     sh.fill(place(figure.source(b3, (130, 0, 1035, 1920))[1] > 0, b3), mode='white')
     r3 = figure.draw_figure(sh, b3, (130, 0, 1035, 1920))
     strokes += r3['strokes']
+    # the gap between her thighs shows the deck behind her: carry the gutter grate's slanted bars through it,
+    # same pitch and slant as the bars either side, so the background reads as continuous
+    _gap3 = np.zeros((H, W), bool)
+    _gap3[b3[1]:b3[3], b3[0]:b3[2]] = r3['mat'] == 0
+    _win = np.zeros((H, W), bool); _win[2290:2420, 1370:1445] = True
+    _gap3 = nd.binary_erosion(_gap3 & _win, iterations=2)
+    _up = _gap3.copy(); _up[2300:] = False
+    _up |= nd.binary_erosion(np.pad(r3['mat'] == 0, ((b3[1], H - b3[3]), (b3[0], W - b3[2]))) &
+                             (np.arange(H)[:, None] >= 2150) & (np.arange(H)[:, None] < 2300) &
+                             (np.arange(W)[None, :] >= 1370) & (np.arange(W)[None, :] < 1445), iterations=2)
+    # above the grate: the deck's light tone, evenly, instead of the reference's stray grey patch and specks
+    sh.fill(_up, mode='white')
+    tone(sh, _up, level=0.15, lpi=figure.LPI)
+    with sh.clip(_gap3):
+        for _x in (1381.2, 1402.0, 1422.8, 1443.6):
+            sh.fill([(_x, 2313), (_x + 8, 2313), (_x - 19, 2400), (_x - 27, 2400)])
 effects.border(sh, P3, 0.8)
 
 # ---- Panel 2: the face, with a flash behind it
