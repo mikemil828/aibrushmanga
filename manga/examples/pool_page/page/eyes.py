@@ -63,3 +63,34 @@ ImageDraw.Draw(_tb).polygon(TAIL_EDGE + [(1080, 905), (1046.7, 905), (1020, 908)
                                          (940, 966.7), (930, 1000)], fill=1)
 mat[np.asarray(_tb, bool) & (mat == 0)] = 3
 np.save('mat.npy', mat)
+
+# the waving hand: the umbrella's rim caught under the little finger is not hand, and the middle finger's right side
+# had a notch bitten out where the canopy's light line crossed it
+_nd2 = __import__('scipy.ndimage', fromlist=['x'])
+mat[432:463, 874:916][mat[432:463, 874:916] > 0] = 0
+_n = mat[305:352, 806:816]
+_n[_n == 0] = 1
+# the floor between the fin by her cheek and her palm was read as scales: it is background
+_fl = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_fl).polygon([(725, 368), (728, 390), (739, 425), (710, 442), (700, 452), (700, 470), (760, 470),
+                             (760, 368)], fill=1)
+mat[np.asarray(_fl, bool) & (mat == 3)] = 0
+# the hand's edge, smoothed at the reference's own scale so each finger keeps an even width
+_hr = (slice(250, 470), slice(700, 930))
+_hs = _nd2.gaussian_filter((mat[_hr] == 1).astype(np.float32), 2.2) > 0.5
+_h = mat[_hr]
+_h[_hs & (_h == 0)] = 1
+_h[~_hs & (_h == 1)] = 0
+# the floor under the waving hand's thumb was read as scales: it is background
+mat[465:610, 668:810][mat[465:610, 668:810] == 3] = 0
+# the forehead triangle between two bangs reaches up to its tip: skin, not hair shine
+_ft = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_ft).polygon([(450.6, 261), (458.75, 273), (463, 300), (416, 300)], fill=1)
+mat[np.asarray(_ft, bool) & (mat == 4)] = 1
+# the gap between her left arm and her waist is the pool behind her, not body
+_gp = Image.new('L', (W, H), 0)
+ImageDraw.Draw(_gp).polygon([(354, 1005), (356, 1040), (357, 1080), (356, 1120), (354, 1160), (355, 1185),
+                             (359, 1185), (362, 1170), (365, 1145), (369, 1115), (375, 1085), (377, 1060),
+                             (372, 1030), (362, 1005)], fill=1)
+mat[np.asarray(_gp, bool)] = 0
+np.save('mat.npy', mat)
