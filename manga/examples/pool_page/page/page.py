@@ -175,7 +175,7 @@ with sh.clip(pmask(P2)):
     c = tp2(510, 400)
     effects.flash(sh, c, r_in=0.42 * (b2[2] - b2[0]), r_out=1.2 * (b2[3] - b2[1]), count=150, seed=4)
     sh.fill(place(nd.binary_dilation(mat2 > 0, iterations=3), b2), mode='white')
-    r2 = figure.draw_figure(sh, b2, CROP2, dict(contour_mm=0.55))
+    r2 = figure.draw_figure(sh, b2, CROP2, dict(contour_mm=0.55, content=True))   # eyes closed, content
     strokes += r2['strokes']
     balloon((b2[0] + 0.30 * (b2[2] - b2[0]), b2[1] + 0.12 * (b2[3] - b2[1])), 0.22 * (b2[2] - b2[0]),
             0.075 * (b2[3] - b2[1]), 'OVER\nHERE!!', tail=tp2(470, 330), size_mm=4.6)
@@ -188,7 +188,12 @@ with sh.clip(pmask(P4)):
     rgb4, mat4, tp4, s4 = figure.source(b4, CROP4)
     effects.speed_lines(sh, b4, angle=-12, count=70, length=(0.3, 0.8), seed=6)
     _cols4 = figure.SRCBOX[0][0] + np.arange(mat4.shape[1]) / s4
-    mat4 = np.where((_cols4 < 712)[None, :], 0, mat4)
+    _rows4 = figure.SRCBOX[0][1] + np.arange(mat4.shape[0]) / s4
+    _keep4 = np.zeros(mat4.shape, bool)
+    for _t in np.linspace(0, 1, 40):
+        _keep4 |= (_cols4[None, :] - (716 - 23 * _t)) ** 2 + (_rows4[:, None] - (463 - 4 * _t)) ** 2 <= (14.5 - 3.5 * _t) ** 2
+    mat4 = np.where(_keep4, 1, mat4)
+    mat4 = np.where((_cols4 < 712)[None, :] & ~_keep4, 0, mat4)   # the thumb reaches past the cut
     _lab4, _n4 = nd.label(mat4 > 0)
     if _n4 > 1:
         _sz4 = nd.sum(mat4 > 0, _lab4, np.arange(1, _n4 + 1))
@@ -196,7 +201,7 @@ with sh.clip(pmask(P4)):
     sh.fill(place(nd.binary_dilation(mat4 > 0, iterations=3), b4), mode='white')
     # the sliver of her face at the panel's left edge is cut: it read as a broken shape, and the hand is the beat
     r4 = figure.draw_figure(sh, b4, CROP4, dict(contour_mm=0.55, blush=False, inner_pen='saji', inner_w=1.5, inner_min=14,
-                                              even=0.85, cut_left=712, blk_min=60))
+                                              even=0.85, cut_left=712, cut_keep=((716, 463, 14.5), (693, 459, 11)), blk_min=60))
     strokes += r4['strokes']
     # two specks where the contour turns sharply at the finger webs: scrape them and lay the skin tone back
     _yy, _xx = np.mgrid[:H, :W]

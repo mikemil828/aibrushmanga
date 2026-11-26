@@ -86,7 +86,19 @@ def draw_figure(sh, box, crop, opt=None):
     if o.get('cut_left'):
         vx0 = SRCBOX[0][0]
         cols = vx0 + np.arange(mat.shape[1]) / s
-        mat = np.where((cols < o['cut_left'])[None, :], 0, mat)
+        cut = (cols < o['cut_left'])[None, :] & np.ones_like(mat, bool)
+        keep = np.zeros_like(cut)
+        if o.get('cut_keep'):
+            # a finger reaching past the cut (e.g. the thumb): drawn as a tapered capsule from (x0,y0,r0) at its
+            # base to a rounded tip (x1,y1,r1), ref px. The traced skin there merges with what it touches.
+            (x0, y0, r0), (x1, y1, r1) = o['cut_keep']
+            rows = SRCBOX[0][1] + np.arange(mat.shape[0]) / s
+            for tt in np.linspace(0, 1, 40):
+                cx, cy, rr = x0 + (x1 - x0) * tt, y0 + (y1 - y0) * tt, r0 + (r1 - r0) * tt
+                keep |= ((cols[None, :] - cx) ** 2 + (rows[:, None] - cy) ** 2 <= rr * rr)
+            keep &= cut
+            mat = np.where(keep, 1, mat)
+        mat = np.where(cut & ~keep, 0, mat)
         # keep only the main piece (the hand), and round the cut end so it reads as a fingertip, not a sawn edge
         lab_c, nc = nd.label(mat > 0)
         if nc > 1:
@@ -94,7 +106,7 @@ def draw_figure(sh, box, crop, opt=None):
             mat = np.where(lab_c == 1 + int(np.argmax(szc)), mat, 0)
         near_cut = (cols < o['cut_left'] + 14)[None, :] & np.ones_like(mat, bool)
         rounded = nd.gaussian_filter((mat > 0).astype(np.float32), 4 * s) > 0.5
-        mat = np.where(near_cut & ~rounded, 0, mat)
+        mat = np.where(near_cut & ~rounded & ~keep, 0, mat)
     # scales: clean shapes. The traced patches came out sawtoothed and full of small islands; round their
     # edges at the panel's scale, fill the pinholes and drop specks, so each patch reads as one smooth piece
     sc = mat == SCALES
@@ -110,12 +122,23 @@ def draw_figure(sh, box, crop, opt=None):
         mat = np.where(sc & ~scs, SKIN, mat)
         mat = np.where(scs & (mat == SKIN), SCALES, mat)
     fig = mat > 0
-    eyez = np.asarray(Image.fromarray(EYEZONE).resize((X1 - X0, Y1 - Y0), Image.NEAREST, box=SRCBOX[0]))
+    _zone = EYEZONE | eyes_hand.mouth_region(EYEZONE.shape[1], EYEZONE.shape[0]) if o.get('content') else EYEZONE
+    eyez = np.asarray(Image.fromarray(_zone).resize((X1 - X0, Y1 - Y0), Image.NEAREST, box=SRCBOX[0]))
+    if o.get('content'):
+        # the content face: the open eyes and mouth become plain skin, shaded flat from the skin around them
+        _fz = eyes_hand.face_redraw_region(EYEZONE.shape[1], EYEZONE.shape[0], pad=11)
+        fz = np.asarray(Image.fromarray(_fz).resize((X1 - X0, Y1 - Y0), Image.NEAREST, box=SRCBOX[0]))
+        eyez = eyez | (fz & (mat != HAIR))
+        mat = np.where(fz & (mat != HAIR), SKIN, mat)
+        fig = mat > 0
     hair = mat == HAIR
     # inside the hand-drawn zones (eyes, plain swimsuit) the reference's shading is not ours: take the shade
     # from just outside, so no cel-shadow edge traces the shapes we left out
     _ei = nd.distance_transform_edt(eyez, return_distances=False, return_indices=True)
     ds = ds[tuple(_ei)]
+    if o.get('content'):
+        _ring = nd.binary_dilation(fz, iterations=int(6 * s)) & ~fz & (mat == SKIN)
+        ds = np.where(fz, np.median(ds[_ring]) if _ring.any() else ds, ds)
     # fabric shading reads as broad soft shapes, never as the outline of something printed on it
     ds = np.where(mat == SUIT, nd.gaussian_filter(ds, 7 * s), ds)
     # lines of the figure, at the panel's own scale
@@ -223,7 +246,11 @@ def draw_figure(sh, box, crop, opt=None):
         sz = nd.sum(blk, lab, range(1, n + 1))
         blk = np.isin(lab, 1 + np.nonzero(sz >= o.get('blk_min', 20) * s * s)[0])
         sh.fill(place(sh, blk, box))
-    eyes_hand.draw_eyes(sh, to_page, s)
+    if o.get('content'):
+        eyes_hand.draw_closed_eyes(sh, to_page, s)
+        eyes_hand.draw_smile(sh, to_page, s)
+    else:
+        eyes_hand.draw_eyes(sh, to_page, s)
     skin_face = (mat > 0) & (mat != HAIR)
     eyes_hand.draw_cheek_scales(sh, to_page, s, face=place(sh, skin_face, box))
     # the face contour runs along the patch's outer edge: ink it again on top of the pale patch
