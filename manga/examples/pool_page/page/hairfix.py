@@ -30,7 +30,7 @@ mat[(mat > 0) & (mat != 4) & crown & nd.binary_fill_holes(mat == 4)] = 4
 np.save('mat.npy', mat)
 # forehead skin showing between the bangs: lighter than any lock there, so it is skin, not hair
 gg = nd.gaussian_filter(g, 1.0)
-fh = (mat == 4) & face & (gg > 0.50) & (np.arange(g.shape[0])[:, None] > 255)
+fh = (mat == 4) & face & (gg > 0.38) & (np.arange(g.shape[0])[:, None] > 235)
 fh = nd.binary_opening(fh, iterations=1)
 mat[fh] = 1
 np.save('mat.npy', mat)
