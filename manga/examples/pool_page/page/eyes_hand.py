@@ -64,7 +64,10 @@ def _ell(cx, cy, rx, ry, n=90, rot=0.0):
     return np.column_stack([cx + x * c - y * s_, cy + x * s_ + y * c])
 
 
-def draw_eyes(sh, to_page, s, style='detailed'):
+IRIS_SCALE = 1.3
+
+
+def draw_eyes(sh, to_page, s, style='detailed', iris_scale=None):
     """The eyes, layer by layer, as a manga artist builds them:
     sclera (paper) with the lid's cast shadow -> iris: dark upper half, light lower half, radial streaks and a
     reflected crescent -> heavy iris rim -> pupil -> catch-lights -> lash band with gloss specks, lash spikes and
@@ -76,8 +79,12 @@ def draw_eyes(sh, to_page, s, style='detailed'):
     P = lambda pts: np.array([to_page(x, y) for x, y in pts], float)        # noqa: E731
     sm = lambda pts, per=8: geom.catmull(P(pts), per=per)                    # noqa: E731
     rng = np.random.default_rng(31)
+    k = IRIS_SCALE if iris_scale is None else iris_scale
     for e in EYES:
         lid, low = sm(e['lid']), sm(e['lower'])
+        # a bigger iris needs a rounder eye: the lower lid drops most in the middle
+        bow = np.sin(np.linspace(0, np.pi, len(low)))
+        low = low + np.column_stack([np.zeros(len(low)), bow * (k - 1) * 22 * s])
         opening = np.vstack([lid, low[::-1]])
         open_m = _mask(W, H, opening)
         # 1. sclera: paper, with the upper lid's shadow lying across it
@@ -85,7 +92,9 @@ def draw_eyes(sh, to_page, s, style='detailed'):
         shadow = np.vstack([lid, (lid + [0, 3.5 * s])[::-1]])
         tone(sh, _mask(W, H, shadow) & open_m, level=0.28, lpi=70, angle=45)
         # 2. iris
-        cx, cy = to_page(*e['iris'][:2]); rx, ry = e['iris'][2] * s, e['iris'][3] * s
+        k = IRIS_SCALE if iris_scale is None else iris_scale
+        cx, cy = to_page(*e['iris'][:2]); rx, ry = e['iris'][2] * s * k, e['iris'][3] * s * k * 1.08
+        cy += (k - 1) * 4 * s                      # grow downward too: the upper lid hides the top
         iris = _mask(W, H, _ell(cx, cy, rx, ry)) & open_m
         Y, X = np.mgrid[0:H, 0:W].astype(np.float32)
         v = (Y - (cy - ry)) / (2 * ry)                                     # 0 top .. 1 bottom of the iris
@@ -114,14 +123,19 @@ def draw_eyes(sh, to_page, s, style='detailed'):
         # 4. pupil
         px, py = to_page(*e['pupil'][:2])
         with sh.clip(open_m):
-            sh.fill([tuple(p) for p in _ell(px, py, e['pupil'][2] * s, e['pupil'][3] * s)])
+            sh.fill([tuple(p) for p in _ell(px, py, e['pupil'][2] * s * k, e['pupil'][3] * s * k)])
             # 5. catch-lights: a big one over the iris edge, a small one by the pupil, a glint below
             for lx, ly, lrx, lry in e['lights']:
                 qx, qy = to_page(lx, ly)
-                sh.fill([tuple(p) for p in _ell(qx, qy, lrx * s, lry * s, rot=-0.35)], mode='white')
-                sh.stroke(_ell(qx, qy, lrx * s, lry * s, 60, rot=-0.35), pen='maru', pressure=0.15, taper=(0, 0))
+                ix, iy = to_page(*e['iris'][:2])
+                qx, qy = ix + (qx - ix) * k, iy + (qy - iy) * k + (k - 1) * 2 * s
+                sh.fill([tuple(p) for p in _ell(qx, qy, lrx * s * k, lry * s * k, rot=-0.35)], mode='white')
+                sh.stroke(_ell(qx, qy, lrx * s * k, lry * s * k, 60, rot=-0.35), pen='maru', pressure=0.15,
+                          taper=(0, 0))
             if style == 'detailed':
                 gx, gy = to_page(*e['glint'][:2])
+                ix, iy = to_page(*e['iris'][:2])
+                gx, gy = ix + (gx - ix) * k, iy + (gy - iy) * k
                 sh.fill([tuple(p) for p in _ell(gx, gy, e['glint'][2] * s, e['glint'][2] * s)], mode='white')
         # 6. lash band: solid black between lid and lash line, the wing sweeping past the corner
         lash = sm(e['lash'])
