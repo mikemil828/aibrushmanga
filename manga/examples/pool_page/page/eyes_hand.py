@@ -112,9 +112,6 @@ def draw_eyes(sh, to_page, s, style='detailed', iris_scale=None):
     sclera (paper) with the lid's cast shadow -> iris: dark upper half, light lower half, radial streaks and a
     reflected crescent -> heavy iris rim -> pupil -> catch-lights -> lash band with gloss specks, lash spikes and
     the outer wing -> crease -> lower lid and a few lower lashes."""
-    if style == 'simple':
-        import eyes_hand_v1
-        return eyes_hand_v1.draw_eyes(sh, to_page, s)
     W, H = int(round(sh.W / sh.k)), int(round(sh.H / sh.k))
     P = lambda pts: np.array([to_page(x, y) for x, y in pts], float)        # noqa: E731
     sm = lambda pts, per=8: geom.catmull(P(pts), per=per)                    # noqa: E731

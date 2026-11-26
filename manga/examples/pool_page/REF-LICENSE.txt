@@ -1,0 +1,5 @@
+ref.png: copyright mikemil828 (the owner of this fork). All rights reserved.
+
+This image is not covered by the repository's AGPL-3.0 license. It is included only so that the pool page example
+in this folder can be run and studied. Do not redistribute it, modify it, or use it in other works without the
+owner's permission.

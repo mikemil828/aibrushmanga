@@ -1,28 +1,31 @@
-# Pool page (test 3)
+# Pool page
 
-A grey anime illustration redrawn as an inked, toned manga page, with decisions made by hand per region.
+A four-panel B4 manga page drawn from a reference illustration: the place (umbrella, sea, loungers), the wave
+(hand close-up with speed lines), the face (flash, hand-drawn eyes, blush hatching, balloon) and the full figure
+(G-pen contour, maru inner lines, two-tone cel shading per material).
 
-The reference image, `ref.png`, is included in this folder. It was made by the repository owner, who added it for this example. Run from this folder:
+The reference image, `ref.png`, is artwork by the fork's owner, all rights reserved (see `REF-LICENSE.txt`); it is
+here only so the example runs.
 
-    python path/to/masks.py    # figure, hair and pool masks (polygons drawn for this image), saves *.npy
-    python path/to/draw3.py    # draws draw3_beta.png
+## Run
 
-- Figure: G-pen and maru lines with a 1 px white edge, stock tones a step lighter in the mid range.
-- Background: maru only, lighter, no lines under 18 px, tones at 60 %.
-- Hair: solid black, gloss scraped out, a few strands drawn back in white.
-- Pool: one light tone, ripples scraped to paper.
+One step, from any folder:
 
-The polygons fit one image only. For a new image, draw new ones.
+    python manga/examples/pool_page/run.py            # page/page.png and page/page.jsonl, about 1 min
+    python manga/examples/pool_page/run.py --print 2  # also page/print.png at print size (16 px/mm)
 
-## page/ — a manga page using the image as reference only
+`run.py` runs, in order: `masks.py` (figure, hair and line masks from the reference), then in `page/`
+`materials.py` (material map: skin, suit, scales, hair, paper), `hairfix.py`, `eyes.py` (hand-placed fixes) and
+`page.py`.
 
-Four panels on a B4 page: the place (umbrella, sea, loungers, drawn by hand from points read off the
-reference), the wave (hand close-up with speed lines), the face (flash, hand-drawn eyes, blush hatching,
-balloon) and the full figure (G-pen contour, maru inner lines, two-tone cel shading per material).
+## What is drawn by hand
 
-Run from `page/`, with the reference at `../ref.png` and test 3's `fig.npy`, `hair.npy`, `lines.npy` in `..`
-(from `masks.py`):
+The reference supplies the figure's shapes and materials; the inker's decisions go on top:
 
-    python materials.py && python hairfix.py && python eyes.py   # material map: skin, suit, scales, hair
-    python page.py page.jsonl                                    # page.png, about 35 s
-    python -m manga.replay page.jsonl --scale 2 --out print.png  # print size, about 1 min
+- Eyes, mouth and cheek scales: points read off the reference (`page/eyes_hand.py`).
+- Panel 1 (umbrella, sea, loungers), the big umbrella's ribs and the bushes in the tall panel
+  (`page/panel1.py`, `page/umbrella3.py`, `page/bushes3.py`).
+- Hair as strands following its flow (`page/hair.py`), an even-weight body contour (`page/contour.py`).
+- Corrections to the material map where the reference was misread, one per review note (`page/eyes.py`).
+
+The points and corrections fit this one image. For a new image, draw new ones.
