@@ -35,25 +35,34 @@ CHEEKS = [
 ]
 
 
-def _mirror_right_to_left(R, mx=495.0, dy=-17.0):
-    M = lambda pts: [(2 * mx - x, y + dy) for x, y in pts]                 # noqa: E731
+def _mirror_right_to_left(R, left_iris=(424.0, 374.0)):
+    """The right eye reflected across her face's midline. Her head tilts, so the midline is not vertical: it is
+    the perpendicular bisector of the line between the two irises, and the reflection turns the eye with it
+    (a plain left-right flip left the left eye's corners at the wrong angle)."""
+    Rc = np.array(R['iris'][:2], float); Lc = np.array(left_iris, float)
+    M = (Rc + Lc) / 2; u = (Rc - Lc) / np.hypot(*(Rc - Lc))
+    def P(x, y):
+        v = np.array([x, y], float); v = v - 2 * np.dot(v - M, u) * u
+        return float(v[0]), float(v[1])
+    def A(a):                                            # a direction reflected the same way
+        d = np.array([np.cos(a), np.sin(a)]); d = d - 2 * np.dot(d, u) * u
+        return float(np.arctan2(d[1], d[0]))
+    Ms = lambda pts: [P(x, y) for x, y in pts]          # noqa: E731
     L = dict(R)
     for key in ('lid', 'lash', 'crease', 'lower'):
-        L[key] = M(R[key])[::-1]
-    L['wing'] = [M(w) for w in R['wing']]
-    L['spikes'] = [(2 * mx - x, y + dy, np.pi - a) for x, y, a in R['spikes']]
-    L['lower_lash'] = [(2 * mx - x, y + dy, ln) for x, y, ln in R['lower_lash']]
-    L['iris'] = (2 * mx - R['iris'][0], R['iris'][1] + dy) + tuple(R['iris'][2:])
-    L['pupil'] = (2 * mx - R['pupil'][0], R['pupil'][1] + dy) + tuple(R['pupil'][2:])
+        L[key] = Ms(R[key])[::-1]
+    L['wing'] = [Ms(w) for w in R['wing']]
+    L['spikes'] = [P(x, y) + (A(a),) for x, y, a in R['spikes']]
+    L['lower_lash'] = [P(x, y) + (ln,) for x, y, ln in R['lower_lash']]
+    L['iris'] = P(*R['iris'][:2]) + tuple(R['iris'][2:])
+    L['pupil'] = P(*R['pupil'][:2]) + tuple(R['pupil'][2:])
     L['outer'] = 0
     return L
 
 
-# the left eye was drawn a different shape from the right one; it now mirrors the right eye
+# the left eye was drawn a different shape from the right one; it now mirrors the right eye across her tilted
+# face's midline
 EYES[0] = _mirror_right_to_left(EYES[1])
-# her head tilts, so the mirrored left eye opened a little wider: raise its lower lid to match the right eye
-EYES[0]['lower'] = [(x, y - 4.0 * np.sin(np.pi * i / (len(EYES[0]['lower']) - 1)) - 1.5)
-                    for i, (x, y) in enumerate(EYES[0]['lower'])]
 
 # catch-lights placed on the iris itself (fractions of its radii), the same for both eyes: the light comes
 # from the upper left, so they are not mirrored

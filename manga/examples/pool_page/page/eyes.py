@@ -83,9 +83,9 @@ _h[_hs & (_h == 0)] = 1
 _h[~_hs & (_h == 1)] = 0
 # the floor under the waving hand's thumb was read as scales: it is background
 mat[465:610, 668:810][mat[465:610, 668:810] == 3] = 0
-# the forehead triangle between two bangs reaches up to its tip: skin, not hair shine
+# the forehead between two bangs, from one bang's black edge to the other's: skin, not hair shine
 _ft = Image.new('L', (W, H), 0)
-ImageDraw.Draw(_ft).polygon([(450.6, 261), (458.75, 273), (463, 300), (416, 300)], fill=1)
+ImageDraw.Draw(_ft).polygon([(457, 241), (448.5, 251), (412, 294), (412, 300), (465, 300), (459.5, 250)], fill=1)
 mat[np.asarray(_ft, bool) & (mat == 4)] = 1
 # the gap between her left arm and her waist is the pool behind her, not body
 _gp = Image.new('L', (W, H), 0)
