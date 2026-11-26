@@ -68,3 +68,15 @@ def drawn_zone(to_page, s, box):
         d.line([L(p) for p in RIM], fill=1, width=w)
     d.line([L(POLE[0]), L(POLE[1])], fill=1, width=int(20 * s))
     return np.asarray(im, bool)
+
+
+# the pale fin tip above her right cheek reads as sky on the page: no traced lines there either
+FIN_SKY = [(684, 333), (702, 333), (737, 368), (733, 378), (688, 378)]
+
+
+def drawn_zone_and_sky(to_page, s, box):
+    from PIL import Image, ImageDraw
+    X0, Y0, X1, Y1 = box
+    im = Image.new('L', (X1 - X0, Y1 - Y0), 0)
+    ImageDraw.Draw(im).polygon([tuple(np.array(to_page(*p)) - (X0, Y0)) for p in FIN_SKY], fill=1)
+    return drawn_zone(to_page, s, box) | np.asarray(im, bool)

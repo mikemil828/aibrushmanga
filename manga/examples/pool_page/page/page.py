@@ -118,7 +118,7 @@ b3 = ibox(P3)
 with sh.clip(pmask(P3)):
     import umbrella3
     n, fig3 = background(b3, (130, 0, 1035, 1920), light=0.5, min_len=34, sky_to=880, water=(1090, 1530),
-                         drop=umbrella3.drawn_zone)
+                         drop=umbrella3.drawn_zone_and_sky)
     strokes += n
     import umbrella3
     _, _, tp3, s3 = figure.source(b3, (130, 0, 1035, 1920))
