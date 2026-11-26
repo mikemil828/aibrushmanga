@@ -134,9 +134,35 @@ def mountains(sh):
 # ------------------------------------------------------------------ village: trees, pine, houses
 def village(sh):
     t = Z['trees']
-    blk = nd.binary_opening(t & (Ls < 0.22), iterations=1)
-    lay(sh, t & ~blk, np.full(L.shape, 0.62))
+    right = XX > 700
+    # left of the path the trees frame the near village: black against the mist, as before
+    tl = t & ~right
+    blk = nd.binary_opening(tl & (Ls < 0.22), iterations=1)
+    lay(sh, tl & ~blk, np.full(L.shape, 0.62))
     sh.fill(upm(blk))
+    # right: layered by distance. The two front cedars stay black; the trees behind them and the broadleaf
+    # tree step back in tone, so the mass reads as a grove in the mist rather than one black block
+    tr = t & right
+    Lt = nd.gaussian_filter(L, 2.0)
+    lv = np.clip(0.6 + 2.0 * (0.22 - Lt), 0.55, 0.82)
+    lay(sh, tr, lv)
+    Lf = nd.gaussian_filter(L, 1.0)
+    front = nd.binary_closing(tr & (Lf < 0.14), iterations=1) & tr
+    lab, n = nd.label(front)
+    if n:
+        sizes = nd.sum(front, lab, np.arange(1, n + 1))
+        keep = np.zeros(n + 1, bool); keep[1:] = sizes > 60
+        front = keep[lab]
+    sh.fill(upm(front))
+    # a thin line where a darker layer stands in front of a lighter one, so the layers separate
+    for k, (mm, pr) in enumerate([(tr, 0.35)]):
+        f = nd.gaussian_filter(upm(mm).astype(np.float32), 1.5)
+        for j, Pl in enumerate(geom.outlines(f, 0.5, 20)):
+            Q = geom.simplify(Pl, 0.8)
+            for s0 in range(0, len(Q) - 1, 30):
+                seg = Q[s0:s0 + 32]
+                if len(seg) > 1 and seg[:, 1].mean() < P(0, 676)[1]:
+                    sh.stroke(seg, pen='maru', pressure=pr, seed=640 + j * 50 + s0)
     pine(sh)
     lay(sh, Z['houses'], np.full(L.shape, 0.5))          # whatever of the old house shapes the drawn ones leave
     for k, hs in enumerate(HOUSES):
@@ -289,13 +315,15 @@ def paddies(sh, sd):
     ww = ((Z['water'] | Z['shadow']) & ~sdd).astype(np.float32)
     Lw = nd.gaussian_filter(L * ww, 4) / np.maximum(nd.gaussian_filter(ww, 4), 1e-3)
     Lw = np.where(sdd, Lw, L)
-    lv = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, 2.5)), 0, 0.5)
+    # calm water: smooth the reflected light hard (the seedling rows must not print into it)
+    lv = np.clip(1.0 * (0.78 - nd.gaussian_filter(Lw, (2.5, 6.0))), 0, 0.5)
     lv[lv < 0.04] = 0
     core = nd.gaussian_filter(Z['shadow'].astype(np.float32), 3.0)
     lv = np.maximum(lv, np.clip(core * 1.5, 0, 1) * 0.74)
     lay(sh, w, lv, kind='line', angle=90.0)          # angle 90 = horizontal lines
-    glint = w & (Ls > 0.9)
-    sh.fill(upm(nd.binary_opening(glint, iterations=1)), mode='white')
+    glint = (nd.gaussian_filter(Lw, (2.0, 6.0)) > 0.88) & w & ~sdd
+    glint = nd.binary_opening(glint, iterations=3)
+    sh.fill(upm(glint), mode='white')
     # bright water: a few hand ripple lines so it still reads as water
     rng = np.random.default_rng(12)
     bright = w & (lv == 0) & ~sd & (YY > 700)
@@ -315,7 +343,14 @@ def paddies(sh, sd):
     mud = km[labm]
     mud = nd.binary_fill_holes(nd.gaussian_filter(mud.astype(np.float32), 3.0) > 0.5)   # one band, not blots
     mp = upm(mud)
-    core = upm(nd.binary_erosion(mud, iterations=4))
+    # black only in the deep channel along the right bank; elsewhere the soil is a dark tone
+    labc, nc = nd.label(mud)
+    cx = nd.center_of_mass(mud, labc, np.arange(1, nc + 1))
+    deep = np.zeros(nc + 1, bool)
+    deep[1:] = [c[1] > 540 for c in cx]
+    core = upm(nd.binary_erosion(deep[labc], iterations=4))
+    tone(sh, upm(mud & ~deep[labc]), level=0.62, lpi=LPI)
+    mp = upm(deep[labc])
     tone(sh, mp & ~core, level=0.7, lpi=LPI)
     sh.fill(core)
     # the wet edge where mud meets water catches the light: a thin white rim, broken
