@@ -137,11 +137,11 @@ for e in 'lr':
     ic = (ic[0], lo_y - 0.88 * iry)
     iris_m = poly_mask(arc(ic, irx, iry, 0, 360, 40, TILT)) & opening
     irises[e] = iris_m
-    pupil_m = poly_mask(arc((ic[0], ic[1] + 0.05 * iry), 0.3 * irx, 0.42 * iry, 0, 360, 24, TILT))
+    pupil_m = poly_mask(arc((ic[0], ic[1] + 0.03 * iry), 0.34 * irx, 0.48 * iry, 0, 360, 24, TILT))
     # catch-lights just below the lash band (the iris now runs up under it), never on top of it
     lights = (poly_mask(arc((ic[0] - 0.32 * irx, ic[1] - 0.08 * iry), 0.26 * irx, 0.2 * iry, 0, 360, 20)) |
               poly_mask(arc((ic[0] + 0.35 * irx, ic[1] + 0.45 * iry), 0.1 * irx, 0.08 * iry, 0, 360, 12))) & ~band_m
-    face.manga_iris(sh, iris_m, pupil=pupil_m, lights=lights, solid=0.14, fade=0.9, peak=0.8, pupil_r=0.16,
+    face.manga_iris(sh, iris_m, pupil=pupil_m, lights=lights, solid=0.2, fade=0.86, peak=0.88, pupil_r=0.16,
                     sparkles=0, rim=0.7, seed=3)
     sh.fill(pupil_m & iris_m & ~lights)
     sh.fill(band_m)

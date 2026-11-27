@@ -67,6 +67,7 @@ JAW = [(0.69, 1.02, 0.02), (0.64, 1.16, 0.2), (0.5, 1.31, 0.4), (0.3, 1.43, 0.58
        (0.0, HEAD['chin'], 0.76)]
 RAMUS = (0.8, 0.8, -0.1)          # the back of the jaw rises from its corner to just under the ear
 EYE_SPAN, EYE_OUT, EYE_SET, EYE_LOW = 65.0, 22.0, 1.1, 0.8  # opening half-width on the ball (deg), outward aim, depth, lower lid
+CHEEK_ROUND = 1.75    # how fully the cheek's cross-section rounds its corner (2 = a quarter ellipse)
 FACE_CURVE = 0.9     # how fast the front of the face falls back toward the sides: z = profile - FACE_CURVE * x^2
 
 
@@ -244,20 +245,28 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         show = facing(nrm) > -0.05
         U2, L2 = proj(up)[0][show], proj(lo)[0][show]
         if vis and len(U2) > 1:
-            # Where the ball turns away, the lids stop short of their corner; close the gap with the
-            # eyeball's own rounded edge (half to each lid, so they meet in a soft corner, not a straight cut).
-            # The bulge points away from the opening's middle.
+            # Where the ball turns away, the lids stop short of their corner; close the gap along the
+            # eyeball's own edge on the page (its limb: a circle of the ball's radius round its projected
+            # centre), half to each lid, so they meet in a soft corner that wraps the ball.
             mid = np.r_[U2, L2].mean(0)
+            bc = proj(ball)[0]
+            rb = re * r
             def close(a_, b_):
-                gap = np.linalg.norm(b_ - a_)
-                if gap < 0.04 * r:
+                if np.linalg.norm(b_ - a_) < 0.04 * r:
                     return None
-                m = (a_ + b_) / 2
-                away = m - mid
-                away /= np.linalg.norm(away) + 1e-9
-                ctrl = m + away * 0.22 * gap
-                t = np.linspace(0, 1, 9)[:, None]
-                return (1 - t) ** 2 * a_ + 2 * (1 - t) * t * ctrl + t * t * b_
+                da, db = a_ - bc, b_ - bc
+                t0, t1 = np.arctan2(da[1], da[0]), np.arctan2(db[1], db[0])
+                away = (a_ + b_) / 2 - mid
+                ta = np.arctan2(away[1], away[0])
+                d = (t1 - t0 + np.pi) % (2 * np.pi) - np.pi          # the short way round...
+                mid_t = t0 + d / 2
+                if np.cos(mid_t - ta) < 0:                            # ...unless that runs through the eye
+                    d = d - np.sign(d) * 2 * np.pi
+                t = np.linspace(0, 1, 9)
+                ang = t0 + d * t
+                ra = np.linalg.norm(da) * (1 - t) + np.linalg.norm(db) * t
+                ra = ra + 0.35 * (np.maximum(rb, ra) - ra) * np.sin(np.pi * t)   # swell gently toward the limb
+                return bc + np.stack([np.cos(ang), np.sin(ang)], 1) * ra[:, None]
             outer = close(U2[-1], L2[-1]) if not show[-1] else None
             inner = close(U2[0], L2[0]) if not show[0] else None
             if outer is not None:
@@ -310,7 +319,11 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
             # lumps in the cheek): a smooth front depth
             zf = np.interp(ye, [HEAD['brow'], HEAD['eye'], HEAD['mouth'], HEAD['chin']], [0.97, 0.94, 0.88, 0.76])
             w = abs(xe)
-            cand = np.stack([sxf * w * np.sin(th), np.full_like(th, ye), ze + (zf - ze) * np.cos(th)], 1)
+            # a flattened quarter (superellipse, CHEEK_ROUND < 2): the face turns its corner less fully than a
+            # ball, so from about 45 degrees the nose tip can stand past it
+            u = np.sin(th)
+            cand = np.stack([sxf * w * u, np.full_like(th, ye),
+                             ze + (zf - ze) * (1 - u ** CHEEK_ROUND) ** (1 / CHEEK_ROUND)], 1)
             q = proj(cand)[0]
             limb.append(q[np.argmax((q - c) @ right * s_out)])
         sides[far] = np.array(limb)
@@ -331,7 +344,11 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
             k = np.ones(7) / 7
             ou = np.convolve(np.pad(ou, 3, mode='edge'), k, mode='valid')
         cheek = c + np.outer(dn, down) + np.outer(ou * s_out, right)
-        use_prof = ((prof2 - cheek) @ right * s_out > 0) & near_profile
+        # from about 30 degrees the tip of the nose breaks the cheek line on its own, a small point: let the
+        # profile through there only (lips and chin stay hidden until near profile)
+        ys_c = contour[:, 1]
+        nose_tip = (abs(turn) > 0.5) & (ys_c > HEAD['nose'] - 0.12) & (ys_c < HEAD['nose'] + 0.05)
+        use_prof = ((prof2 - cheek) @ right * s_out > 0) & (near_profile | nose_tip)
         sides[far] = np.where(use_prof[:, None], prof2, cheek)
     out['jaw'] = [tuple(p) for p in sides['l']] + [tuple(p) for p in sides['r'][::-1]]
     if draw:

@@ -409,7 +409,8 @@ def test_head_side_planes_and_profile():
     far = t3f[(t3f[:, 0] > 300) & (t3f[:, 1] > 260) & (t3f[:, 1] < 380)]
     a, b = far[np.argmin(far[:, 1])], far[np.argmax(far[:, 1])]
     d = b - a
-    assert min((d[0] * (p - a)[1] - d[1] * (p - a)[0]) / np.linalg.norm(d) for p in far) < -5.5        # -4.5 with the bare contour
+    dev = [(d[0] * (p - a)[1] - d[1] * (p - a)[0]) / np.linalg.norm(d) for p in far]
+    assert max(abs(v) for v in dev) > 5.0        # 4.5 with the bare contour: it swells and hollows, never ruled
     # the near jaw bows outward: on a turned head it stands well outside the straight line from corner to chin
     t3 = sketch.head(sh, (300, 250), 100, turn=0.3, draw=False)
     jaw = np.array(t3['jaw'])

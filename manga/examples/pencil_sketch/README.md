@@ -76,6 +76,12 @@ row (no convex hull) whenever the head is not near profile, eased with a short m
 toward a smooth front instead of the nose and lips, so it can hollow a little below the cheekbone in a
 three-quarter view without lumps.
 
+Fifth pass. The rounded eye corner now runs along the eyeball's own edge on the page (the limb: a circle of
+the ball's radius round its projected centre), so it wraps the ball. The cheek's cross-section is a flattened
+quarter (a superellipse, `CHEEK_ROUND` 1.75) rather than a full ellipse, and from about 30 degrees the nose tip
+alone may break the cheek line, ahead of the lips and chin. The eyes have their weight back: a larger solid
+top on the iris, a denser tone and a larger pupil, with the gradient still showing under the lash band.
+
 ## Weak spots (honest list)
 
 - Beyond those few shadows the face is flat; there is no form shading on cheek or jaw.
@@ -83,9 +89,8 @@ three-quarter view without lumps.
 - The ring of light on the hair has a regular sawtooth edge.
 - The shoulders are plain; there is no body under the collar.
 - The far side lock bulges outward just below the crown.
-- With the solid black at the iris top reduced, the eyes read a little lighter than before; the lash band is
-  now the only heavy black on the face.
-- The far cheek hides the nose and lips until the head is nearly in profile (past about 0.75); a realistic
-  three-quarter would let the nose tip break the outline.
-- The eyeball's rounded edge where the lids are cut off is a simple curve, not the ball's true limb.
+- With this small manga nose the far cheek still covers the nose tip in a true three-quarter (turn 0.71); the
+  tip breaks the outline only from about 0.8. Showing it earlier would take a more prominent nose, which is a
+  style choice.
+- Where a lid meets the eyeball's edge on a near-profile eye there is a slight kink.
 - No hairline or neck in the construction itself; the neck is still placed by the example.
