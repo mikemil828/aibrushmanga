@@ -70,6 +70,12 @@ chin = h['chin']
 # (the trapezius), so they meet it above the collar, not at its foot.
 NB = chin[1] + 0.4 * R                                 # neck base (where the collar sits, front)
 neck_l, neck_r = (chin[0] - 0.5 * R, chin[1] - 0.2 * R), (chin[0] + 0.3 * R, chin[1] - 0.22 * R)
+# each side of the neck starts on the jaw line itself, so its top tucks under the jaw instead of crossing it
+_low = [p for p in h['jaw'] if p[1] > chin[1] - 0.45 * R]
+def on_jaw(p):
+    q = min(_low, key=lambda j: abs(j[0] - p[0]))
+    return (p[0], max(p[1], q[1]))
+neck_l, neck_r = on_jaw(neck_l), on_jaw(neck_r)
 neck_lb, neck_rb = (neck_l[0] - 0.1 * R, NB), (neck_r[0] + 0.09 * R, NB - 4)
 trap_l, trap_r = lerp(neck_l, neck_lb, 0.6), lerp(neck_r, neck_rb, 0.6)
 sk.curve(sh, [neck_l, lerp(neck_l, neck_lb, 0.5), neck_lb], 0.35, 40)

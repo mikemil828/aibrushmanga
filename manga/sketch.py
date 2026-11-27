@@ -62,8 +62,11 @@ PROFILE = ([-1.0, HEAD['hairline'], HEAD['brow'], HEAD['eye'], 0.66, HEAD['nose'
            [0.0, 0.91, 0.99, 0.94, 0.99, 1.04, 0.93, 0.92, 0.85, 0.86, 0.76])
 # cheek down the front edge of the side plane to the jaw corner (below the plane's vertical line), then to the chin
 CHEEK = [(0.82, HEAD['brow'], 0.55), (0.81, 0.45, 0.42), (0.76, 0.8, 0.22), (0.69, 1.02, 0.02)]
-JAW = [(0.69, 1.02, 0.02), (0.58, 1.17, 0.28), (0.36, 1.36, 0.52), (0.14, 1.48, 0.7), (0.0, HEAD['chin'], 0.76)]
+# the jaw leaves its corner steeply and rounds off toward the chin, so it bows down and out (never a ruler line)
+JAW = [(0.69, 1.02, 0.02), (0.64, 1.16, 0.2), (0.5, 1.31, 0.4), (0.3, 1.43, 0.58), (0.13, 1.49, 0.7),
+       (0.0, HEAD['chin'], 0.76)]
 RAMUS = (0.8, 0.8, -0.1)          # the back of the jaw rises from its corner to just under the ear
+EYE_SPAN, EYE_OUT, EYE_SET = 65.0, 22.0, 1.1    # half-width of the opening on the ball (deg), outward aim, depth
 FACE_CURVE = 0.9     # how fast the front of the face falls back toward the sides: z = profile - FACE_CURVE * x^2
 
 
@@ -85,6 +88,20 @@ def _upper_envelope(x, y):
         hull.append(i)
     hx, hy = x[hull], y[hull]
     return np.maximum(y, np.interp(x, hx, hy))
+
+
+def _hull(pts):
+    """Convex hull of 2D points, counter-clockwise (monotone chain)."""
+    pts = sorted(map(tuple, np.asarray(pts, float)))
+    def half(seq):
+        h = []
+        for q in seq:
+            while len(h) >= 2 and (h[-1][0] - h[-2][0]) * (q[1] - h[-2][1]) - (h[-1][1] - h[-2][1]) * (q[0] - h[-2][0]) <= 0:
+                h.pop()
+            h.append(q)
+        return h
+    lower, upper = half(pts), half(pts[::-1])
+    return np.array(lower[:-1] + upper[:-1])
 
 
 def _resample(pts, n):
@@ -176,18 +193,47 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         ear_vis = facing(n_side) > -0.35
         out['ear_' + e] = tuple(proj(ec)[0]) if ear_vis else None
         out['ear_shape_' + e] = [tuple(p) for p in proj(shape)[0]] if ear_vis else None
-    # eyes: on the face surface, foreshortened by how far the surface has turned from us
+    # eyes: each is an eyeball set into its socket behind the face surface. The opening (lids) lies on the
+    # ball and faces forward and a little outward (EYE_OUT), so the outer corner sits further back than the
+    # inner one. Its outline on the page is the hull of the projected lids: an almond facing us, a wedge
+    # opening toward the nose in profile, set back from the nose line by the socket's depth.
     eye_dx, ex, ey = 0.42, 0.28, 0.23
     out['eye_size'] = (ex * r, ey * r)
+    span = np.deg2rad(EYE_SPAN)
+    re = ex / np.sin(span)                                   # ball radius so the opening is 2 ex wide facing us
     for e, sx in (('l', -1), ('r', 1)):
         x = sx * eye_dx
         p, vis = P(x, HEAD['eye'])
+        phi = np.linspace(-span, span, 15)                   # across the opening, inner corner (-) to outer (+)
+        lid = np.sin(np.linspace(0, np.pi, 15))
+        a = phi + np.deg2rad(EYE_OUT)                       # aim of each lid point round the ball, from forward
+        # shift the ball inward so that, facing us, the opening is centred on the eye's place on the face
+        bx = x - sx * re * (np.sin(a[-1]) + np.sin(a[0])) / 2
+        zc = _face_z(bx, HEAD['eye']) - EYE_SET * re
+        ball = np.array([bx, HEAD['eye'], zc])
+        lx = ball[0] + sx * re * np.sin(a)
+        lz = ball[2] + re * np.cos(a)
+        up = np.stack([lx, ball[1] - ey * lid, lz], 1)
+        lo = np.stack([lx, ball[1] + 0.7 * ey * lid, lz], 1)
+        # the cornea bulges a little in front of the ball between the lids: in profile the front of the
+        # opening rounds forward instead of being cut off flat
+        cy_ = np.linspace(-0.8 * ey, 0.55 * ey, 7)
+        bulge = 1 + 0.12 * np.cos(np.pi * (cy_ - cy_.mean()) / (cy_[-1] - cy_[0]))
+        cornea = np.stack([np.full(7, ball[0]), ball[1] + cy_, ball[2] + re * bulge], 1)
+        pts2 = proj(np.r_[up, lo[::-1], cornea])[0]
+        hull = _hull(pts2)
+        # the centre is the middle of the opening mirrored top to bottom, so it stays on the eye line
+        box = proj(np.r_[up, up * [1, -1, 1] + [0, 2 * ball[1], 0]])[0]
+        lo2, hi2 = box.min(0), box.max(0)
         tan = np.array([1.0, 0.0, -2 * FACE_CURVE * x])
         tan /= np.linalg.norm(tan)
         shrink = np.linalg.norm(rot(tan)[:2])
-        out['eye_' + e] = tuple(p)
+        # the centre follows the opening: in a turn the near eye's middle slides back from the nose line
+        ctr = (lo2 + hi2) / 2 if vis else p
+        out['eye_' + e] = (float(ctr[0]), float(ctr[1]))
         out['eye_vis_' + e] = bool(vis)
         out['eye_size_' + e] = (ex * r * max(shrink, 0.15), ey * r * max(abs(cp), 0.5))
+        out['eye_shape_' + e] = [tuple(q) for q in hull] if vis else None
         out['brow_' + e] = tuple(P(x, HEAD['brow'])[0])
     for k in ('nose', 'mouth', 'chin'):
         out[k] = tuple(P(0.0, HEAD[k])[0])

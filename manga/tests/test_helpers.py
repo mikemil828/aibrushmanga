@@ -397,6 +397,18 @@ def test_head_side_planes_and_profile():
     assert prof['eye_vis_l'] and not prof['eye_vis_r']
     assert prof['ear_l'][0] < 300 + 5                                    # the ear sits behind the middle
     assert prof['nose'][0] > prof['chin'][0] > 300                      # nose and chin stand out in front
+    # the profile eye is set back from the nose line and opens toward it: a wedge, its back corner furthest
+    shape = np.array(prof['eye_shape_l'])
+    assert prof['nose'][0] - shape[:, 0].max() > 15                    # well behind the nose line (r = 100)
+    assert shape[:, 1].max() - shape[:, 1].min() > 1.5 * np.ptp(shape[:, 0][shape[:, 0] > shape[:, 0].max() - 3])
+    # the near jaw bows outward: on a turned head it stands well outside the straight line from corner to chin
+    t3 = sketch.head(sh, (300, 250), 100, turn=0.3, draw=False)
+    jaw = np.array(t3['jaw'])
+    low = jaw[(jaw[:, 1] > t3['ear_l'][1] + 30) & (jaw[:, 0] < t3['chin'][0])]
+    a, b = low[np.argmin(low[:, 1])], low[np.argmax(low[:, 1])]
+    d = b - a
+    bow = max((d[0] * (p - a)[1] - d[1] * (p - a)[0]) / np.linalg.norm(d) for p in low)
+    assert bow > 13                                                      # it was 11 with the ruler-straight jaw
     # looking down bows the eye line downward in the middle (it wraps round the face)
     down = sketch.head(sh, (300, 250), 100, nod=0.6, draw=False)['lines']['eye']
     mid, ends = down[len(down) // 2][1], (down[0][1] + down[-1][1]) / 2

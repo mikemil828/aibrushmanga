@@ -52,6 +52,13 @@ but no measurements; the numbers are mine.
 On this page the turn reads more clearly: the far eye is narrower and closer to the far cheek, the far cheek
 slopes in, and the near jaw runs from under the ear to the chin.
 
+Eyes and jaw, second pass. Each eye is now an eyeball set into its socket, behind the face surface, with the
+opening (lids) on the ball aimed forward and a little outward. `head` returns its outline as `eye_shape_l` /
+`eye_shape_r`: an almond facing us, and in profile a wedge that opens toward the nose with the cornea rounding
+its front, set back from the nose line by about a quarter of the cranium radius. The jaw now leaves its
+corner steeply and rounds off toward the chin, so the near jaw bows a little instead of running ruler-straight
+from the ear; the chin keeps its point. The example's neck now starts on the jaw line, so it tucks under it.
+
 ## Weak spots (honest list)
 
 - Beyond those few shadows the face is flat; there is no form shading on cheek or jaw.
@@ -59,7 +66,7 @@ slopes in, and the near jaw runs from under the ear to the chin.
 - The ring of light on the hair has a regular sawtooth edge.
 - The shoulders are plain; there is no body under the collar.
 - The far side lock bulges outward just below the crown.
-- The construction's eye in profile sits close to the profile line and is still an ellipse; a manga profile
-  eye is a narrow wedge set further back.
-- The near jaw line is nearly straight from the ear to the chin; manga jaws curve a little more.
+- The far cheek, from the cheekbone down to the chin, is still close to a straight line.
+- The construction's eye opening is a plain lens with sharp corners; it gives the placement and the
+  foreshortening, not the lid shapes, which are still inked by hand from it.
 - No hairline or neck in the construction itself; the neck is still placed by the example.

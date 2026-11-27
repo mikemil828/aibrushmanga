@@ -1,6 +1,6 @@
 """Loomis turnaround: sketch.head from facing us to a full profile, looking down and up, leaning and turned
 away. Run from this folder: python3 turnaround.py  ->  turnaround.png (pencil construction in blue, the face
-outline the construction returns inked in black, eyes roughed in pencil)."""
+outline the construction returns inked in black, eye openings roughed in pencil)."""
 import os
 import sys
 
@@ -20,6 +20,6 @@ for i, (turn, tilt, nod) in enumerate(POSES):
     h = sk.head(sh, (cx, cy), R, turn=turn, tilt=tilt, nod=nod, seed=i)
     for e in 'lr':
         if h['eye_vis_' + e]:
-            sk.ellipse(sh, h['eye_' + e], *h['eye_size_' + e], rot=tilt, passes=1, pressure=0.5, seed=50 + i)
+            sk.curve(sh, h['eye_shape_' + e] + h['eye_shape_' + e][:1], pressure=0.5, seed=50 + i)
     sh.stroke(h['jaw'], pen='maru', pressure=0.5)
 sh.png(os.path.join(HERE, 'turnaround.png'), sketch=True)
