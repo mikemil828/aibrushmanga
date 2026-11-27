@@ -96,16 +96,16 @@ from .журнал import ФИЗИКА, разница_физики
 
 # Е-7: поля строк журнала. Строка с незнакомым полем — ошибка с номером строки и ближайшим именем; в журнале без
 # заголовка "physics" (записан до встроенного журнала) — предупреждение, поле пропускается, как раньше.
-ПОЛЯ_ХОЛСТА = {'canvas', 'ground', 'px_per_mm', 'grain', 'physics', 'seed', 'seeds'}
+ПОЛЯ_ХОЛСТА = {'canvas', 'ground', 'px_per_mm', 'grain', 'physics', 'seed', 'seeds', 'arm'}      # 'arm' — Рм-1: кто и какой рукой вёл ходы (`рука/патч.py`); повтор его не читает
 ПОЛЯ_НАМЕРЕНИЯ = {'stage', 'object', 'intent'}
 ПОЛЯ_МАЗКА = {'lines', 'layer', 'size', 'color', 'colors', 'ctrl', 'points', 'core', 'opacity', 'layout', 'load', 'wipe', 'end',
               'mix_below', 'level', 'ridges', 'reserve', 'touch', 'seed', 'preset', 'paint', 'pressure', 'dry', 'set',
               'pressure_along', 'tool', 'fibers', 'load_along', 'entry', 'angle', 'rotation_along', 'tilt_along',
               'azimuth_along', 'brush_tone', 'stripe', 'stripe_len', 'brush', 'hand', 'path_seed', 'path_rng', 'medium',
-              'swatch', 'depth'} | ПОЛЯ_НАМЕРЕНИЯ
+              'swatch', 'depth', 'arm_from', 'arm_part', 'arm_fill'} | ПОЛЯ_НАМЕРЕНИЯ      # 'arm_from', 'arm_part' — Рм-1: намерение хода, который провела рука; 'arm_fill' — Рм-4: ход дорисовки руки; повтор их не читает
 ПОЛЯ_СУШКИ = {'dry', 'set', 'wet', 'layer', 'area'} | ПОЛЯ_НАМЕРЕНИЯ
 ПОЛЯ_СЛОЁВ = {'layer_drop', 'layer_order'} | ПОЛЯ_НАМЕРЕНИЯ
-ПОЛЯ_ЛЕНТЫ = {'tape', 'shape', 'mask', 'layer', 'height', 'untape'} | ПОЛЯ_НАМЕРЕНИЯ   # Н-3: скотч — лента и снятие
+ПОЛЯ_ЛЕНТЫ = {'tape', 'shape', 'mask', 'layer', 'height', 'untape', 'arm_from'} | ПОЛЯ_НАМЕРЕНИЯ   # Н-3: скотч — лента и снятие
 ПОЛЯ_КИСТИ = {'brush', 'def', 'wipe', 'dirt', 'pick', 'colors', 'paint', 'layout', 'pick_linear', 'pick_cover', 'swatch', 'left'} | ПОЛЯ_НАМЕРЕНИЯ
 ПОЛЯ_ПАЛИТРЫ = {'palette', 'color', 'paint'} | ПОЛЯ_НАМЕРЕНИЯ     # М-1: замес палитры
 ПОЛЯ_ЗАГРУЗКИ = {'load_brush', 'wipe', 'rinse', 'color', 'colors', 'paint', 'swatch', 'amount', 'layout'} | ПОЛЯ_НАМЕРЕНИЯ   # Д-1: живая краска кисти
