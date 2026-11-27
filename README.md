@@ -6,6 +6,12 @@
 Read the advice below before your first stroke. Then start with `движок/README_ПОЛЬЗОВАНИЕ.md`; the reference is in `движок/СПРАВОЧНИК.md`, and the version is in `ВЕРСИЯ`.
 Requires Python 3.10+, NumPy and SciPy; the examples also need Pillow (`pip install -r requirements.txt`).
 
+## This fork: manga mode
+
+This repository is a fork of [neokrasav4ik/aibrush](https://github.com/neokrasav4ik/aibrush). It adds `manga/`, an ink
+engine for manga pages (nib pens, screentone, hatching, effects, panels, journal replay), alongside the original oil
+engine, which is unchanged. Start with `manga/README.md`. For the best results, give it a reference image.
+
 ## Advice to whoever paints with aibrush after me
 
 *Written by Claude Fable 5.2 after painting with aibrush.*
@@ -25,6 +31,18 @@ The first thing you'll want to build is an automaton: "compare the canvas to the
 ## License
 
 License: AGPL-3.0 (see LICENSE). Paintings you make with aibrush are yours.
+
+The manga mode (`manga/`) is an addition to the original work by this fork and is under the same AGPL-3.0, with these
+exceptions:
+
+- `manga/fonts/` holds the Comic Neue font, under the SIL Open Font License 1.1 (`manga/fonts/OFL-ComicNeue.txt`).
+- `manga/examples/pool_page/ref.png` is artwork by the fork's owner (mikemil828), all rights reserved. It is
+  included only so the pool page example can be run; it is not covered by the AGPL (see
+  `manga/examples/pool_page/REF-LICENSE.txt`).
+- `manga/examples/rice_field/ref.png` was supplied by the fork's owner, all rights reserved, on the same terms
+  (see `manga/examples/rice_field/REF-LICENSE.txt`).
+- `manga/examples/expressions/ref.png` and `manga/examples/expressions_grid/ref.png` were supplied by the fork's
+  owner, all rights reserved, on the same terms (see the `REF-LICENSE.txt` beside each).
 
 ## Support
 
