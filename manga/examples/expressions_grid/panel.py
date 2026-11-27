@@ -32,6 +32,12 @@ from manga import Sheet, tone, trace, effects, face, tools
 from manga import prep as mprep
 import prep as ref
 
+# STYLE=manga (default) draws as a manga inker does, learned from a published page: a mostly paper iris, the
+# heaviest stroke on the upper lashes, skin left white, a white gap round the figure, one outline round it.
+# STYLE=cel keeps the colour art's layers (every shade in the reference becomes tone).
+STYLE = os.environ.get('STYLE', 'manga')
+EYES = STYLE
+
 t0 = time.time()
 PPM = 8.0
 M = 88                                         # margin, px (11 mm)
@@ -194,6 +200,15 @@ with sh.clip(PANEL):
     shadow = nd.binary_opening(shadow, iterations=1) | nd.binary_opening(nd.binary_closing(shadow & LOW, iterations=4),
                                                                           iterations=3)
     shadow = nd.gaussian_filter(shadow.astype(np.float32), 1.2) > 0.5
+    if STYLE == 'manga':
+        # an inker leaves skin white: only the shadow under the chin and the one the hair casts stay. Not the lids,
+        # the nose or the ears (the ears get their lines)
+        ears_z = np.zeros_like(shadow)
+        for i in range(N):
+            ears_z |= cellmask(i, 0.30, 0.72, 0.10, 0.33) | cellmask(i, 0.30, 0.72, 0.67, 0.90)
+        cast = shadow & nd.binary_dilation(hair_t, iterations=3) & ~EYEZ & ~ears_z
+        cast = nd.binary_propagation(cast, mask=shadow & ~EYEZ & ~ears_z & nd.binary_dilation(hair_t, iterations=16))
+        shadow &= LOW | cast
     tone(sh, full(shadow & ~hair_m & ~jacket), level=0.20, lpi=LPI)
     # 2. hair: dark tone, its shine a light tone; the collar darker still, its deepest folds black
     shine = nd.binary_opening(P['shine'] & hair_m, iterations=1)
@@ -288,8 +303,12 @@ with sh.clip(PANEL):
                              abs((c[0][1].start + c[0][1].stop) / 2 - cx))) if pc else np.zeros_like(im)
             if half:
                 SMALL |= nd.binary_dilation(im, iterations=1) & ~pup
-            face.iris(sh, full(im), full(lv), pupil=full(pup), lights=full(lights), seed=60 + i,
-                      rim=0.3 if half else 0.6, streaks=3 if half else 6)
+            if EYES == 'manga':
+                face.manga_iris(sh, full(im), pupil=full(pup), lights=full(lights), seed=60 + i,
+                                solid=0.40 if half else 0.26, fade=0.85 if half else 0.66, sparkles=0 if half else 3)
+            else:
+                face.iris(sh, full(im), full(lv), pupil=full(pup), lights=full(lights), seed=60 + i,
+                          rim=0.3 if half else 0.6, streaks=3 if half else 6)
             LIGHTS |= lights
         # (the reference draws its own lower lids: they come with the thin lines)
         # the lid's shadow falls from the lash band only: the iris's own dark rim casts none, or tone shows below it
@@ -358,6 +377,21 @@ with sh.clip(PANEL):
     lidb = blk & nd.binary_dilation(whites_b, iterations=4) & EYEZ & ~lash_big & ~nd.binary_dilation(IRIS, iterations=2) \
         & ~nd.binary_erosion(nd.binary_fill_holes(nd.binary_dilation(whites_b, iterations=2)), iterations=3)   # a pupil inside the white stays solid
     blk &= ~tips & ~lidb
+    # the figure's silhouette against the background: in manga style one smooth outline (drawn in step 8), so the
+    # traced pieces along it go
+    figure = nd.binary_fill_holes(nd.binary_opening(~P['bg'], iterations=2))
+    figure = nd.gaussian_filter(figure.astype(np.float32), 1.0) > 0.5
+    sil_band = nd.binary_dilation(figure & ~nd.binary_erosion(figure, iterations=1), iterations=3)
+    if STYLE == 'manga':
+        blk &= ~sil_band; tips &= ~sil_band
+    if EYES == 'manga':                              # the upper lash band is the heaviest mark on the face
+        # from the lash band itself: a brow's tail line running into it must not cut notches out of it
+        _lb = nd.binary_closing(nd.binary_dilation(lash_big & ~nd.binary_dilation(brows, iterations=1), iterations=1),
+                                iterations=2)
+        _lb = nd.binary_opening(_lb, structure=np.ones((1, 11), bool)) | (_lb & ~nd.binary_dilation(
+            nd.binary_opening(_lb, structure=np.ones((1, 11), bool)), iterations=4))   # drop lumps on the band's edge
+        _lb = nd.gaussian_filter(_lb.astype(np.float32), 1.6) > 0.5          # one smooth band, not a lumpy one
+        blk = (blk & ~lash_big) | (_lb & EYEZ & ~nd.binary_erosion(IRIS, iterations=1))
     n1, _ = trace.ink_line_art(sh, full(blk), pens=('maru', 'g_pen'), split_mm=0.22, min_len_px=6, beta_px=3.0,
                                weight=1.0, min_px=1.0, even=0.6, seed=7)
     nlb, _ = trace.ink_line_art(sh, full(lidb), pens=('maru', 'maru'), min_len_px=6, beta_px=99, weight=0.8,
@@ -365,7 +399,7 @@ with sh.clip(PANEL):
     nt, _ = trace.ink_line_art(sh, full(tips), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.45,
                                min_px=1.0, even=0.95, seed=14)
     # 6b. brows over the lashes: one tapered stroke each, from thick to thin, with a paper ring round it
-    with sh.clip(full(~hair_t)):                     # paper ring: the same stroke, 4 px wider, in white
+    with sh.clip(full(~hair_t & ~nd.binary_dilation(lash_big | blk & EYEZ, iterations=3))):   # paper ring, 4 px wider; not over the lashes
         for pts, w in BROW_STROKES:
             face.brow_ring(sh, pts + M, w)
     for pts, w in BROW_STROKES:
@@ -375,6 +409,10 @@ with sh.clip(PANEL):
         & ~hair_edge & ~jacket & ~P['bg']
     thin = P['line'] & free & ~open_m & ~(BAND & ~P['black'])      # the band's edge is not a line
     thin &= ~BROWALL
+    if STYLE == 'manga':
+        thin &= ~sil_band
+        for i in range(N):                           # the nose is one stroke (drawn below), not its shadow's edges
+            thin &= ~cellmask(i, 0.44, 0.68, 0.40, 0.60)
     # the eye white's own grey rim: only its lower half is a lid, drawn as a light hairline; the rest of the rim
     # (round the corners, past the lash band) is left out, or every eye gets a ring
     whites = big(P['white'] & EYEZ & ~LIGHTS, 200)
@@ -391,7 +429,7 @@ with sh.clip(PANEL):
     n2, _ = trace.ink_line_art(sh, full(thin & ~MOUTHZ), pens=('maru', 'saji'), split_mm=0.2, min_len_px=5,
                                beta_px=99, weight=0.8, min_px=1.2, even=0.8, seed=8)
     mouth_l = nd.binary_closing((P['line_soft'] | DARK) & MOUTHZ & ~open_m & ~P['bg'], iterations=2)
-    nl, _ = trace.ink_line_art(sh, full(lower), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.7,
+    nl, _ = trace.ink_line_art(sh, full(face.lid_dashes(lower) if EYES == 'manga' else lower), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.7,
                                min_px=1.1, even=0.9, seed=18)
     n2 += nl
     n2m, _ = trace.ink_line_art(sh, full(mouth_l), pens=('maru', 'g_pen'), split_mm=0.12, min_len_px=8, beta_px=99,
@@ -400,17 +438,41 @@ with sh.clip(PANEL):
     with sh.clip(full(nd.binary_dilation(jacket, iterations=3))):
         nz, _ = trace.ink_line_art(sh, full(zipl & ~P['skin']), pens=('maru', 'maru'), min_len_px=10, beta_px=99,
                                    weight=0.5, min_px=1.0, even=0.9, seed=17)
+    if STYLE == 'manga':
+        # the nose: one short stroke at its tip, where the colour art has a shadow patch
+        for i in range(N):
+            nose_m = nd.binary_opening(P['shadow'] & cellmask(i, 0.44, 0.66, 0.40, 0.60), iterations=1)
+            pcs = comps(nose_m, 40)
+            if not pcs:
+                continue
+            sl, piece = max(pcs, key=lambda c: c[1].sum())
+            ys_n, xs_n = np.nonzero(piece); ys_n = ys_n + sl[0].start; xs_n = xs_n + sl[1].start
+            yb = np.percentile(ys_n, 92)
+            xl, xr = np.percentile(xs_n, 25), np.percentile(xs_n, 90)
+            sh.stroke([(xl + M, yb + M + 1.5), (xr + M, yb + M - 1.5)],
+                      pen='maru', pressure=0.7, taper=(0.5, 0.6), seed=90 + i)
     # 8. hair strand lines and the outlines of hair and collar
     strands = nd.binary_opening(P['strand'] & nd.binary_erosion(hair_m, iterations=3) & ~shine, iterations=1)
     n3, _ = trace.ink_line_art(sh, full(strands), pens=('maru', 'maru'), min_len_px=24, beta_px=99, weight=0.6,
                                min_px=1.0, even=0.8, seed=9)
-    with sh.clip(full(~INNER)):
-        n4 = mprep.ink_outline(sh, full(hair_t), pen='g_pen', pressure=(0.35, 0.6), sigma=1.5, min_len=30, seed=10)
-    # the ears' outer edge: the figure's silhouette against the background, where it is not hair
-    figure = nd.binary_fill_holes(nd.binary_opening(~P['bg'], iterations=2))
-    figure = nd.gaussian_filter(figure.astype(np.float32), 1.0) > 0.5
-    with sh.clip(full(EARS & ~nd.binary_dilation(hair_t, iterations=1))):
-        ne = mprep.ink_outline(sh, full(figure), pen='g_pen', pressure=(0.5, 0.7), sigma=1.2, min_len=12, seed=21)
+    if STYLE == 'manga':
+        # one continuous outline round the whole figure, the heaviest line on it; the hair's own outline only
+        # where the hair meets the face or the collar, not the background
+        with sh.clip(full(~INNER & ~nd.binary_dilation(P['bg'], iterations=5))):
+            n4 = mprep.ink_outline(sh, full(hair_t), pen='g_pen', pressure=(0.35, 0.6), sigma=1.5, min_len=30, seed=10)
+        div = np.zeros_like(figure)
+        for x in ref.COLS:
+            px = int(round((x - ref.X0) * ref.S)); div[:, max(px - 12, 0):px + 13] = True
+        for y in ref.ROWS:
+            py = int(round((y - ref.Y0) * ref.S)); div[max(py - 12, 0):py + 13, :] = True
+        with sh.clip(full(~div)):
+            ne = mprep.ink_outline(sh, full(figure), pen='g_pen', pressure=(0.62, 0.9), sigma=2.0, min_len=20, seed=21)
+    else:
+        with sh.clip(full(~INNER)):
+            n4 = mprep.ink_outline(sh, full(hair_t), pen='g_pen', pressure=(0.35, 0.6), sigma=1.5, min_len=30, seed=10)
+        # the ears' outer edge: the figure's silhouette against the background, where it is not hair
+        with sh.clip(full(EARS & ~nd.binary_dilation(hair_t, iterations=1))):
+            ne = mprep.ink_outline(sh, full(figure), pen='g_pen', pressure=(0.5, 0.7), sigma=1.2, min_len=12, seed=21)
     n5 = mprep.ink_outline(sh, full(jacket), pen='g_pen', pressure=(0.4, 0.65), sigma=1.5, min_len=30, seed=11)
     sh.fill(full(nd.gaussian_filter(LIGHTS.astype(np.float32), 0.7) > 0.5), mode='white')
 

@@ -206,3 +206,17 @@ def caption(sheet, xy, text, size_mm=3.6, pad_mm=1.6, box=True, bold=True, face=
     finally:
         sheet._replaying = was
     return (xy[0], xy[1], xy[0] + bw / k, xy[1] + bh / k)
+
+
+def halo(sheet, figure, width_px=None, width_mm=1.2):
+    """A white gap round a figure (kuchinuki), as published pages cut a figure off from a patterned or toned
+    background: paper `width` wide just outside the figure's mask. Lay the background first, then the halo, then
+    the figure's outline over its edge. `figure` is a bool mask at the sheet's size."""
+    import numpy as np
+    from scipy import ndimage as nd
+    w = width_px if width_px is not None else width_mm * sheet.ppm
+    f = np.asarray(figure, bool)
+    ring = (nd.distance_transform_edt(~f) <= w) & ~f
+    if ring.any():
+        sheet.fill(ring, mode='white')
+    return ring

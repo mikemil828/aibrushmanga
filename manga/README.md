@@ -131,6 +131,14 @@ Learned on the nine-expression grid, over five review rounds:
     lash band and inked solid. Where two zones meet, decide the owner by what lies beside it (a lash band touches
     an eye white), not by which zone came first.
 
+Learned from a published page (measured, not kept):
+
+26. **Leave the colour art's shading out.** A manga inker keeps skin white (only the shadow under the chin and
+    the one the hair casts stay), draws the nose as one stroke, and puts the weight into a few places: one
+    continuous outline round the figure, heavier than the inner lines; the upper lash band, the heaviest mark on
+    the face; a few blacks. `face.manga_iris` draws a mostly paper iris, `face.lid_dashes` a lower lid as
+    dashes, and `effects.halo` the white gap that cuts a figure off a patterned background.
+
 ## Examples
 
 - `examples/sampler.py`: every tool on one sheet.

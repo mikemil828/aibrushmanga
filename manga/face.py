@@ -12,6 +12,7 @@ hand, so an expression is data that can be changed.
     face.iris_to_rim(iris_mask, dark)                   # an iris filled out to the reference's own rim
     face.iris(sh, iris_mask, levels, pupil=m, lights=m) # cel-shaded iris, rim, streaks, pupil, catch-lights
     face.eye_white(sh, white_mask, lash_mask)           # the lid's cast shadow on the white
+    face.manga_iris(sh, iris_mask, pupil=m, lights=m)   # mostly paper: black top, fading tone, small pupil
     face.open_mouth(sh, inside, tongue=m)               # black inside, toned tongue, clean teeth
     face.blush(sh, (cx, cy), rx, ry, n=7)               # slanted hatch on a cheek
     face.gloom(sh, mask)                                # vertical line tone and falling lines: dread
@@ -316,6 +317,67 @@ def iris(sh, mask, levels, pupil=None, lights=None, rim=0.6, streaks=7, lpi=60, 
     if lights is not None and lights.any():
         L = _smooth(lights, 0.7)
         sh.fill(L, mode='white')
+
+
+def manga_iris(sh, mask, pupil=None, lights=None, solid=0.26, fade=0.66, peak=0.7, pupil_r=0.13, sparkles=3,
+               rim=0.65, lpi=60, seed=0):
+    """An iris the way a manga inker draws it, not the colour art's cel layers: mostly paper. Black under the
+    lid down to `solid` of its height, then a tone fading from `peak` to nothing by `fade`; a small round
+    pupil (`pupil_r` of the iris's width, centred where the reference's pupil is); a few small sparkle dots
+    on an arc low in the iris; a firm rim; catch-lights scraped back to paper last. Measured on a published
+    page: the iris carries far less grey than the colour reference suggests, and that is what makes it read
+    as drawn rather than traced."""
+    from . import prep
+    m = _smooth(mask, 0.8)
+    if not m.any():
+        return
+    rng = np.random.default_rng(seed)
+    ys, xs = np.nonzero(m)
+    y0, h = ys.min(), max(np.ptp(ys), 1)
+    cx, cy = xs.mean(), ys.mean()
+    rx, ry = (np.ptp(xs) + 1) / 2, (np.ptp(ys) + 1) / 2
+    if pupil is not None and np.asarray(pupil).any():
+        py_, px_ = np.nonzero(pupil); cx, cy = px_.mean(), py_.mean()
+    yy = (np.arange(m.shape[0], dtype=np.float32)[:, None] - y0) / h
+    yy = np.broadcast_to(yy, m.shape)
+    sh.fill(m, mode='white')
+    dark = m & (yy < solid)
+    t = np.clip((yy - solid) / max(fade - solid, 1e-3), 0, 1)
+    lv = np.where(m & ~dark, peak * (1 - t) ** 1.6, 0).astype(np.float32)
+    if (lv > 0.02).any():
+        tone(sh, m & ~dark & (lv > 0.02), level=lv, lpi=lpi)
+    if dark.any():
+        sh.fill(_smooth(dark, 1.0) & m)
+    r = max(pupil_r * rx * 2, 1.6)
+    yy2, xx2 = np.mgrid[:m.shape[0], :m.shape[1]]
+    sh.fill(((xx2 - cx) ** 2 + (yy2 - cy) ** 2 <= r * r) & m)
+    if sparkles and min(rx, ry) > 6:                 # small dots on an arc low in the iris
+        for a in np.linspace(0.62 * np.pi, 0.38 * np.pi, sparkles) + rng.normal(0, 0.04, sparkles):
+            px, py = cx + 0.62 * rx * np.cos(a), cy + 0.62 * ry * np.sin(a)
+            d = max(0.07 * rx, 0.9)
+            if m[int(py), int(px)]:
+                sh.stroke([(px - d, py), (px + d, py)], pen='maru', pressure=0.3, taper=(0.4, 0.4), smooth=False)
+    if rim:
+        prep.ink_outline(sh, m, pen='g_pen', pressure=(rim * 0.8, rim), sigma=1.0, min_len=6, seed=seed)
+    if lights is not None and np.asarray(lights).any():
+        sh.fill(_smooth(lights, 0.7), mode='white')
+
+
+def lid_dashes(mask, dash=10, gap=6):
+    """A lower lid as an inker draws it: a few short dashes, not a closed line. Cuts `mask` (a thin lid line)
+    into pieces `dash` px long with `gap` px between, along its longer axis, and keeps the middle of the run."""
+    m = np.asarray(mask, bool)
+    out = np.zeros_like(m)
+    lab, n = nd.label(nd.binary_dilation(m, iterations=2) & m | m)
+    for k, sl in enumerate(nd.find_objects(lab), 1):
+        piece = lab[sl] == k
+        w = piece.shape[1]
+        cols = np.arange(w)
+        keep = ((cols // 1) % (dash + gap)) < dash
+        lo, hi = int(0.12 * w), int(0.88 * w)        # the ends of a lid line fade out
+        keep[:lo] = False; keep[hi:] = False
+        out[sl] |= piece & keep[None, :]
+    return out
 
 
 def open_mouth(sh, inside, tongue=None, teeth=None, tongue_level=0.3, lpi=60, outline=True, seed=0,

@@ -26,6 +26,15 @@ in `manga.tools`.
 - The collar is one shape (its navy plus the near-black inside) with a tone graded by the reference's light.
 - Near-black hair shadow behind the ears is hair (by darkness); blacks round the ears are hairlines.
 
+## Style
+
+`STYLE=manga` (the default) draws the way a manga inker does, learned by comparing against a published page:
+the iris is mostly paper (`face.manga_iris`: black under the lid, a fading tone, a small pupil, sparkle dots),
+the upper lash band is the heaviest stroke on the face, the lower lid is a few dashes (`face.lid_dashes`), skin
+stays white except under the chin and where the hair casts shadow, the nose is one short stroke, and one smooth
+outline runs round the whole figure, heavier than the inner lines. `STYLE=cel python3 panel.py` keeps the
+colour art's layers, as before.
+
 ## Weak spots
 
 Fourth round:
@@ -42,6 +51,8 @@ Fourth round:
   small round iris (the worried face) is drawn as a whole iris with a firm rim, not as a half-closed one.
 
 Remaining:
+- Manga style: the flick lashes at the outer corners are lost when lumps are cleaned off the lash band, and the
+  figure halo (`effects.halo`) is not used here because the background is plain paper.
 - Where the reference's iris has no dark rim at the bottom (the angry face's right eye) the iris ends flat.
 - The collar folds follow the reference's light, so they read as soft shading rather than drawn creases.
 - A brow head is drawn a little thinner than the reference's widest part on some faces (neutral, worried).

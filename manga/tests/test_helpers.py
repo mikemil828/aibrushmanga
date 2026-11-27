@@ -308,3 +308,15 @@ def test_boxes_of_and_run_until(tmp_path):
     s = tmp_path / 'draw.py'
     s.write_text("a = 1 + k\n# ---- ink\nraise SystemExit('drawn')\n")
     assert tools.run_until(str(s), '# ---- ink', k=2)['a'] == 3
+
+
+def test_halo_clears_paper_round_a_figure():
+    from manga import effects, tone
+    sh = Sheet(200, 200, px_per_mm=8.0)
+    tone(sh, np.ones((200, 200), bool), level=0.5, lpi=60)
+    fig = np.zeros((200, 200), bool); fig[60:140, 60:140] = True
+    ring = effects.halo(sh, fig, width_px=10)
+    a = np.asarray(sh.image().convert("L"))
+    assert ring[55, 100] and not ring[100, 100] and not ring[40, 100]
+    if a is not None:
+        assert a[55, 95:105].min() > 200 and a[30:50, 30:50].min() < 120
