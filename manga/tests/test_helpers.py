@@ -270,3 +270,41 @@ def test_tools_layers_before_after_strip_probe_keep(tmp_path, monkeypatch):
     assert tools.keep(a=m) is None
     p = tools.keep(str(tmp_path / 'd.npz'), a=m)
     assert np.load(p)['a'].sum() == m.sum()
+
+
+def test_brow_stroke_is_one_thick_to_thin_stroke():
+    from manga import face
+    m = np.zeros((80, 200), bool)
+    m[30:42, 20:70] = True                          # the thick wedge
+    m[28:44, 66:72] = True                          # a steep fringe tip lying on its end
+    cand = np.zeros_like(m)
+    cand[35:37, 70:150] = True                      # the thin drawn tail that continues it
+    pts, w, line = face.brow_stroke(m, cand, reach=120)
+    assert pts[:, 0].max() > 140                    # it follows the tail: one stroke, not wedge + separate line
+    k = int(np.argmax(w))
+    assert np.all(np.diff(w[k:]) <= 1e-9)           # and only narrows after its widest point
+    assert w.max() < 14 and w[-1] < 4               # the tip did not count as width
+    assert line[36, 100] and not line[10, 100]
+
+
+def test_iris_to_rim_fills_to_the_rim_and_stops_there():
+    from manga import face
+    yy, xx = np.mgrid[:100, :100]
+    r = np.hypot(yy - 50, xx - 50)
+    rim = (r > 20) & (r < 24)
+    hull = (r < 17) | ((r < 30) & (yy > 70) & (np.abs(xx - 50) < 6))   # short of the rim, and a spill past it
+    got = face.iris_to_rim(hull, rim)
+    assert got is not None
+    assert got[50, 50 + 18] and not got[50 + 27, 50]                   # out to the rim, nothing beyond
+    assert face.iris_to_rim(hull, np.zeros_like(rim)) is None or face.iris_to_rim(hull, np.zeros_like(rim)).sum() < 1.6 * hull.sum()
+
+
+def test_boxes_of_and_run_until(tmp_path):
+    from manga import tools
+    m = np.zeros((50, 100), bool)
+    m[5:10, 5:15] = True; m[30:40, 60:70] = True; m[6:9, 50:60] = True
+    bx = tools.boxes_of(m, pad=2)
+    assert len(bx) == 3 and bx[0][0] < bx[1][0]
+    s = tmp_path / 'draw.py'
+    s.write_text("a = 1 + k\n# ---- ink\nraise SystemExit('drawn')\n")
+    assert tools.run_until(str(s), '# ---- ink', k=2)['a'] == 3

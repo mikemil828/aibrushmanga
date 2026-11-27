@@ -3,11 +3,15 @@
     python3 review.py                          # eyes.png, mouths.png: one part of every face, in a grid
     python3 review.py --old prev.png           # also before-after.png against an earlier panel.png
     DUMP=m.npz python3 panel.py && python3 review.py --face 5 --part eyes --masks m.npz   # layers-5-eyes.png
+    python3 review.py --pin 79 43              # pin-79-43.png: reference | drawing | classes round a comment pin
+    python3 review.py --each iris --masks m.npz   # each-iris.png: every detected iris beside the reference
+    python3 review.py --each brows             # each-brows.png, detection only (no build): about 8 s
 
 A part is a box in cell fractions (y0, y1, x0, x1), the same as panel.py's zones.
 """
 import argparse, sys, os
 import numpy as np
+from PIL import Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
 from manga import tools
@@ -34,6 +38,9 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--old'); ap.add_argument('--face', type=int); ap.add_argument('--part', default='eyes')
     ap.add_argument('--masks', help='npz written by DUMP=... python3 panel.py')
+    ap.add_argument('--pin', type=float, nargs=2, metavar=('X%', 'Y%'), help='a comment pin on panel.png')
+    ap.add_argument('--each', help='a mask name: every piece of it beside the reference (from --masks, or from '
+                                   'panel.py run up to its drawing)')
     a = ap.parse_args()
     tools.strip('panel.png', [box(i, 'eyes') for i in range(9)], cols=3, out='eyes.png')
     tools.strip('panel.png', [box(i, 'mouth') for i in range(9)], cols=3, width=300, out='mouths.png')
@@ -49,5 +56,19 @@ if __name__ == '__main__':
             print('masks over the classes, in order:', [k for k in D.files])
         tools.layers('ref.png', 'panel.png', box(a.face, a.part, page=False), masks, offset=(M, M),
                      out=f'layers-{a.face}-{a.part}.png')
+    if a.pin:
+        W, H = Image.open('panel.png').size
+        x, y = a.pin[0] / 100 * W - M, a.pin[1] / 100 * H - M
+        tools.triptych('ref.png', 'panel.png', np.load('parts.npz'), [(x, y)], offset=(M, M),
+                       out=f'pin-{a.pin[0]:g}-{a.pin[1]:g}.png')
+        print('pin at reference px', int(x), int(y))
+    if a.each:
+        if a.masks and a.each in np.load(a.masks).files:
+            m = np.load(a.masks)[a.each]
+        else:                                        # the masks decided before any ink: no full build needed
+            m = tools.run_until('panel.py', 'with sh.clip(PANEL):')[a.each]
+        bx = tools.boxes_of(m, pad=14, min_px=150)
+        tools.beside('ref.png', 'panel.png', bx, offset=(M, M), size=(ref.PW, ref.PH), out=f'each-{a.each}.png')
+        print(len(bx), 'pieces of', a.each)
     print('wrote eyes.png, mouths.png' + (', before-after.png' if a.old else '') +
           (f', layers-{a.face}-{a.part}.png' if a.face is not None else ''))

@@ -173,70 +173,16 @@ BROWALL = np.zeros_like(brows)
 _cand = (P['line'] | P['black'] | P['brown'] | P['hair'] & ~bulk) & BROWZ
 
 
-def _follow(cols, ys, step, cand, xlim, ypred_slope):
-    """Walk from the last column outward in direction `step`, picking up the line nearest the predicted y."""
-    out = []
-    x, y = cols[-1], ys[-1]
-    k = ypred_slope
-    gap = 0
-    while gap <= 5 and abs(x - cols[-1]) < xlim:
-        x += step
-        if x < 0 or x >= cand.shape[1]:
-            break
-        yp = y + k * step
-        lo, hi = int(yp - 3), int(yp + 4)
-        hit = np.nonzero(cand[max(lo, 0):hi, x])[0]
-        if len(hit) == 0:
-            gap += 1; y = yp; continue
-        gap = 0
-        yc = hit.mean() + max(lo, 0)
-        k = 0.7 * k + 0.3 * (yc - y) / step
-        y = yc
-        out.append((x, yc, float(len(hit))))
-    return out
-
-
 for i in range(N):
     cw_i = ref.cell(i)[2] - ref.cell(i)[0]
     for sl, piece in comps(nd.binary_closing(brows & cellmask(i), iterations=2), 120):
         if (sl[0].stop - sl[0].start) > (sl[1].stop - sl[1].start):
             continue
         wm = whole(sl, piece)
-        # a fringe tip that comes down onto the brow's end is steep and narrow: a level opening drops it
-        lv_wm = nd.binary_opening(wm, structure=np.ones((1, 9), bool))
-        if lv_wm.sum() > 0.6 * wm.sum():
-            wm = big(lv_wm, 0.3 * lv_wm.sum())
-        if not wm.any():
-            continue
-        sl = nd.find_objects(wm.astype(int))[0]
-        cols = np.arange(sl[1].start, sl[1].stop)
-        ys = np.array([np.nonzero(wm[:, x])[0].mean() if wm[:, x].any() else np.nan for x in cols])
-        ws = np.array([wm[:, x].sum() for x in cols], float)
-        ok = ~np.isnan(ys); cols, ys, ws = cols[ok], ys[ok], ws[ok]
-        if len(cols) < 6:
-            continue
-        q = max(len(cols) // 4, 2)
-        thin_right = ws[-q:].mean() < ws[:q].mean()
-        if not thin_right:
-            cols, ys, ws = cols[::-1], ys[::-1], ws[::-1]
-        step = 1 if thin_right else -1
-        slope = np.polyfit(cols[-2 * q:], ys[-2 * q:], 1)[0]
-        tail = _follow(list(cols), list(ys), step, _cand & ~wm & cellmask(i), 0.22 * cw_i, slope)
-        X = np.concatenate([cols, [t[0] for t in tail]]).astype(float)
-        Y = np.concatenate([ys, [t[1] for t in tail]])
-        Wd = np.concatenate([ws, [min(t[2], 4.0) for t in tail]])
-        Wd = Wd / np.sqrt(1 + np.gradient(nd.gaussian_filter1d(Y, 3.0, mode='nearest')) ** 2)   # across, not down
-        sel = np.arange(0, len(X), 3)
-        pts = np.column_stack([X[sel], nd.gaussian_filter1d(Y, 2.0, mode='nearest')[sel]])
-        w = nd.gaussian_filter1d(Wd, 2.0, mode='nearest')[sel]
-        w = np.maximum(w, 1.5)
-        k = int(np.argmax(w))                        # from its widest point on, the brow only narrows
-        w[k:] = np.minimum.accumulate(w[k:])
-        BROW_STROKES.append((pts, w))
-        line = np.zeros_like(wm)
-        for x_, y_ in zip(X.astype(int), Y.astype(int)):
-            line[max(y_ - 4, 0):y_ + 5, x_] = True
-        BROWALL |= nd.binary_dilation(wm, iterations=2) | line
+        got = face.brow_stroke(wm, _cand & cellmask(i), reach=0.22 * cw_i)
+        if got:
+            BROW_STROKES.append(got[:2])
+            BROWALL |= got[2]
 IRIS = np.zeros_like(mass); BAND = IRIS.copy(); LIGHTS = IRIS.copy(); MOUTH = IRIS.copy(); SMALL = IRIS.copy(); TEETH = IRIS.copy()
 
 with sh.clip(PANEL):
@@ -312,13 +258,9 @@ with sh.clip(PANEL):
                                    iterations=2)
             # the reference's own dark rim bounds the iris: fill out to it (the pale crescent low in the iris passes
             # for white and skin, so the hull stops short of the rim) and cut away anything beyond it
-            rim_n = nd.binary_closing(DARK & nd.binary_dilation(im, iterations=6), iterations=1)
-            filled = nd.binary_fill_holes(rim_n | nd.binary_erosion(im, iterations=3))
-            enclosed = nd.binary_erosion(filled, iterations=2)          # the rim's own ink stays the traced line's
-            # only where the rim closes into a round shape (a half-closed iris is cut by the lid: left as it is)
-            if not half and 0.8 * im.sum() < enclosed.sum() < 1.6 * im.sum() \
-                    and enclosed.sum() > 0.91 * hull(enclosed).sum():
-                im = enclosed & nd.binary_dilation(im, iterations=6)
+            enclosed = None if half else face.iris_to_rim(im, DARK)
+            if enclosed is not None:
+                im = enclosed
             if core.sum() < 40 or (nd.binary_dilation(im, iterations=6) & P['white']).sum() < 30:
                 continue                                 # no amber, no white beside it: hair or a brow, not an eye
             if im.sum() < 60 or (nd.binary_dilation(im, iterations=6) & P['black']).sum() < 40 \
@@ -423,14 +365,9 @@ with sh.clip(PANEL):
     nt, _ = trace.ink_line_art(sh, full(tips), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.45,
                                min_px=1.0, even=0.95, seed=14)
     # 6b. brows over the lashes: one tapered stroke each, from thick to thin, with a paper ring round it
-    from manga import geom
-    for pts, w in BROW_STROKES:                      # paper ring: the same stroke, 4 px wider, in white
-        Qc = geom.catmull(nd.gaussian_filter1d(np.asarray(pts, float) + M, 2.0, axis=0, mode='nearest'), per=6)
-        wq = np.interp(np.linspace(0, 1, len(Qc)), np.linspace(0, 1, len(w)), w + 4)
-        nq = geom.normals(Qc)
-        with sh.clip(full(~hair_t)):
-            sh.fill([tuple(p) for p in np.vstack([Qc + nq * wq[:, None] / 2, (Qc - nq * wq[:, None] / 2)[::-1]])],
-                    mode='white')
+    with sh.clip(full(~hair_t)):                     # paper ring: the same stroke, 4 px wider, in white
+        for pts, w in BROW_STROKES:
+            face.brow_ring(sh, pts + M, w)
     for pts, w in BROW_STROKES:
         face.brow(sh, [(x + M, y + M) for x, y in pts], w, smooth=2.0)
     # 7. thin lines: creases, nose, mouth lines, ears, jaw, sweat drops, the zip

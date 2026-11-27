@@ -106,6 +106,31 @@ Learned on the expressions panel, over four review rounds:
 19. **Gradients as graded tone, not bands.** A flush is `face.blush_tone` (fades with distance from its edge) over
     an area wider than the colour class, with `face.blush(..., soft=True)` hatching that fades with it.
 
+Learned on the nine-expression grid, over five review rounds:
+
+20. **A comment is one example of a class.** Twice a pinned comment ("the iris runs past its outline") turned out
+    to hold on several faces. Before fixing, look at every instance: `tools.boxes_of(mask)` gives a box round each
+    detected piece, and `tools.beside(ref, drawn, boxes)` puts each one next to the reference. Reply only after
+    the whole set is right. `review.py --each iris` does it in one line.
+21. **Open a pin with `tools.triptych`.** Reference, drawing and colour classes round the point, in one row. It
+    says at once whether the classes are wrong (a prep or detection bug) or the drawing is (`review.py --pin X Y`).
+22. **Try detection without drawing.** Masks are decided before the first ink, so `tools.run_until('panel.py',
+    marker)` returns them in seconds instead of a full build. Print a line of stats per detection (area, colour
+    share, what lies beside it); a false one (hair read as an iris, a cheek as an eye) stands out, and a gate on
+    context (an amber core and an eye white beside it) removes it more surely than any colour threshold.
+23. **A brow is one stroke, thick to thin.** `face.brow_stroke(wedge, cand)` follows the reference's thin tail
+    from the wedge, measures width across the stroke (down a column overstates a sloping brow), drops a steep
+    fringe tip with a level opening, and only narrows after the widest point. Lay `face.brow_ring` for all brows,
+    then ink them. A brow drawn darker than the hair, or touching a fringe tip, is found by cutting the dark
+    pixels free of the hair mass with a 3 px gap, not by colour.
+24. **Use the reference's own outlines as borders.** `face.iris_to_rim` fills an iris out to its drawn rim and
+    nothing past it; a hull of colours stops short where the iris is pale and runs over where the white is
+    shaded. Likewise a shadow cast by one part comes from that part only: `face.eye_white` takes the lash band,
+    not every dark pixel, or the iris's lower rim casts tone under the iris.
+25. **Zones overlap: say which wins.** The eye zone reached the ears, and a dark lock over an ear was taken for a
+    lash band and inked solid. Where two zones meet, decide the owner by what lies beside it (a lash band touches
+    an eye white), not by which zone came first.
+
 ## Examples
 
 - `examples/sampler.py`: every tool on one sheet.
@@ -114,7 +139,8 @@ Learned on the expressions panel, over four review rounds:
 - `examples/expressions/`: eight expressions of one face as a single panel, drawn from a reference sheet. It shows
   how brows, eyes, mouths, blush, gloom and sweat are drawn with `manga.face` (see its README).
 - `examples/expressions_grid/`: nine expressions of a boy in a 3 x 3 grid with a dark collar; irises layered by
-  position, gritted teeth, a blush band (see its README).
+  position and filled to their rim, brows as single tapered strokes, gritted teeth, a blush band (see its
+  README). Its `review.py` has `--pin` and `--each`.
 - `examples/rice_field/`: a single landscape panel (paddies, village, mountains, a walker) drawn from a reference
   image. It shows line tone for water, dot tone for land, and hand-drawn seedlings and figure (see its README).
 

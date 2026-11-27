@@ -7,6 +7,9 @@ of fright). Each has a function here. Shapes come as page-px masks or points, re
 hand, so an expression is data that can be changed.
 
     face.brow(sh, pts, widths)                          # a tapered brow through points
+    pts, w, line = face.brow_stroke(wedge, cand)        # a reference brow as one thick-to-thin stroke
+    face.brow_ring(sh, pts, w)                          # its paper ring, laid before any brow is inked
+    face.iris_to_rim(iris_mask, dark)                   # an iris filled out to the reference's own rim
     face.iris(sh, iris_mask, levels, pupil=m, lights=m) # cel-shaded iris, rim, streaks, pupil, catch-lights
     face.eye_white(sh, white_mask, lash_mask)           # the lid's cast shadow on the white
     face.open_mouth(sh, inside, tongue=m)               # black inside, toned tongue, clean teeth
@@ -146,9 +149,126 @@ def brow(sh, pts, widths, smooth=1.5):
     sh.fill([tuple(p) for p in poly])
 
 
+def _follow(x0, y0, step, cand, reach, slope, win=3, max_gap=5):
+    """Walk column by column from (x0, y0) in direction `step`, taking the candidate pixels nearest the predicted
+    y each time: [(x, y, run_length)]. Stops after `max_gap` empty columns or `reach` px."""
+    out, x, y, k, gap = [], x0, y0, slope, 0
+    while gap <= max_gap and abs(x - x0) < reach:
+        x += step
+        if x < 0 or x >= cand.shape[1]:
+            break
+        yp = y + k * step
+        lo, hi = max(int(yp - win), 0), int(yp + win + 1)
+        hit = np.nonzero(cand[lo:hi, x])[0]
+        if len(hit) == 0:
+            gap += 1; y = yp; continue
+        gap = 0
+        yc = hit.mean() + lo
+        k = 0.7 * k + 0.3 * (yc - y) / step
+        y = yc
+        out.append((x, yc, float(len(hit))))
+    return out
+
+
+def brow_stroke(wedge, cand=None, reach=200, every=3, tail_w=4.0, min_w=1.5, tip_len=9):
+    """A reference brow as ONE stroke from thick to thin, never a thick piece plus a separate thin line.
+
+    `wedge` is the brow's thick part (bool mask, any px space). `cand` (optional, same size) holds the pixels
+    that may continue it (the reference's thin drawn tail: line colours, not the hair's mass); the stroke follows
+    it column by column from the wedge's thin end, up to `reach` px. Widths are measured across the stroke (not
+    down a column, which overstates a sloping brow), smoothed, and from the widest point on they only narrow.
+    A steep, narrow fringe tip lying on the wedge's end is dropped first by a level opening `tip_len` px wide.
+    Returns (pts, widths, line) with pts every `every` columns, or None when the wedge is too small; `line` is
+    the mask the stroke covers, to take out of the traced passes (one owner per pixel)."""
+    wm = np.asarray(wedge, bool)
+    lv = nd.binary_opening(wm, structure=np.ones((1, tip_len), bool))
+    if lv.sum() > 0.6 * wm.sum():
+        lab, n = nd.label(lv)
+        if n:
+            sz = nd.sum(lv, lab, np.arange(1, n + 1))
+            wm = np.isin(lab, 1 + np.nonzero(sz > 0.3 * lv.sum())[0])
+    if not wm.any():
+        return None
+    cols = np.nonzero(wm.any(0))[0]
+    ys = np.array([np.nonzero(wm[:, x])[0].mean() for x in cols])
+    ws = wm[:, cols].sum(0).astype(float)
+    if len(cols) < 6:
+        return None
+    q = max(len(cols) // 4, 2)
+    to_left = ws[:q].mean() < ws[-q:].mean()       # walk towards the thin end...
+    if cand is not None:                            # ...unless only the other end has a tail to follow
+        c = np.asarray(cand, bool) & ~nd.binary_dilation(wm, iterations=1)
+        y0, y1 = int(ys.min()) - 6, int(ys.max()) + 7
+        near_l = c[max(y0, 0):y1, max(cols[0] - 10, 0):cols[0]].sum()
+        near_r = c[max(y0, 0):y1, cols[-1] + 1:cols[-1] + 11].sum()
+        if (near_l > 4) != (near_r > 4):
+            to_left = near_l > 4
+    if to_left:
+        cols, ys, ws = cols[::-1], ys[::-1], ws[::-1]
+    step = 1 if cols[-1] > cols[0] else -1
+    tail = []
+    if cand is not None:
+        slope = np.polyfit(cols[-2 * q:], ys[-2 * q:], 1)[0]
+        tail = _follow(cols[-1], ys[-1], step, np.asarray(cand, bool) & ~wm, reach, slope)
+    X = np.concatenate([cols, [t[0] for t in tail]]).astype(float)
+    Y = np.concatenate([ys, [t[1] for t in tail]])
+    W = np.concatenate([ws, [min(t[2], tail_w) for t in tail]])
+    W = W / np.sqrt(1 + np.gradient(nd.gaussian_filter1d(Y, 3.0, mode='nearest')) ** 2)   # across, not down
+    sel = np.arange(0, len(X), every)
+    pts = np.column_stack([X[sel], nd.gaussian_filter1d(Y, 2.0, mode='nearest')[sel]])
+    w = np.maximum(nd.gaussian_filter1d(W, 2.0, mode='nearest')[sel], min_w)
+    k = int(np.argmax(w))
+    w[k:] = np.minimum.accumulate(w[k:])            # from the widest point on, a brow only narrows
+    line = np.zeros_like(wm)
+    for x_, y_ in zip(X.astype(int), Y.astype(int)):
+        line[max(y_ - 4, 0):y_ + 5, x_] = True
+    return pts, w, nd.binary_dilation(wm, iterations=2) | line
+
+
+def brow_ring(sh, pts, widths, pad=4.0, smooth=2.0):
+    """The paper ring round a brow: the same stroke `pad` px wider, in white. Lay every ring before any brow is
+    inked, or one brow's ring cuts into its neighbour. Clip it (sh.clip) where the ring must not cut the hair."""
+    P = np.asarray(pts, float)
+    if len(P) < 2:
+        return
+    Q = geom.catmull(nd.gaussian_filter1d(P, smooth, axis=0, mode='nearest') if smooth else P, per=6)
+    wq = np.interp(np.linspace(0, 1, len(Q)), np.linspace(0, 1, len(widths)), np.asarray(widths, float) + pad)
+    n = geom.normals(Q)
+    sh.fill([tuple(p) for p in np.vstack([Q + n * wq[:, None] / 2, (Q - n * wq[:, None] / 2)[::-1]])], mode='white')
+
+
+def iris_to_rim(iris, dark, reach=6, inset=2, grow=(0.8, 1.6), min_solid=0.91):
+    """The iris as the reference draws it: everything inside its own dark rim, nothing past it.
+
+    A hull of the iris's colours stops short of the rim where the low crescent is pale (it passes for white or
+    skin), and runs past it where the white's shading has the iris's colours. Here the dark pixels within
+    `reach` px of `iris` are closed into the rim, the rim's inside is filled, and `inset` px are taken off so
+    the rim's own ink stays the traced line's. The result is used only when it is a plausible iris (its area
+    within `grow` of the input, solidity over `min_solid`, i.e. the rim really closed); otherwise None, and the
+    caller keeps its mask. Don't use it on a half-closed iris: the lid cuts it, and there is no round rim."""
+    im = np.asarray(iris, bool)
+    rim = nd.binary_closing(np.asarray(dark, bool) & nd.binary_dilation(im, iterations=reach), iterations=1)
+    filled = nd.binary_fill_holes(rim | nd.binary_erosion(im, iterations=3))
+    enc = nd.binary_erosion(filled, iterations=inset) & nd.binary_dilation(im, iterations=reach)
+    if not (grow[0] * im.sum() < enc.sum() < grow[1] * im.sum()):
+        return None
+    ys, xs = np.nonzero(enc)
+    if len(xs) < 3:
+        return None
+    from scipy.spatial import ConvexHull
+    try:
+        hv = np.column_stack([xs, ys])[ConvexHull(np.column_stack([xs, ys])).vertices]
+    except Exception:
+        return None
+    hm = Image.new('L', (im.shape[1], im.shape[0]), 0)            # the hull drawn in pixels, as the mask is
+    ImageDraw.Draw(hm).polygon([tuple(map(float, p)) for p in hv], fill=1)
+    return enc if enc.sum() > min_solid * np.asarray(hm, bool).sum() else None
+
+
 def eye_white(sh, white, lash, depth=7.0, level=0.26, lpi=70):
     """The white of the eye stays paper; the upper lid casts a thin shadow on it. `white` is the white's mask,
-    `lash` the lash band above it, `depth` the shadow's height in px."""
+    `lash` the lash band above it, `depth` the shadow's height in px. Pass the lash band only, not every dark
+    pixel: the shadow falls below whatever `lash` holds, so an iris's lower rim in it puts tone under the iris."""
     d = int(round(depth))
     sh_m = np.zeros_like(white)
     acc = np.asarray(lash, bool).copy()

@@ -9,6 +9,7 @@
     probe(P, 'ref.png', [(400, y) for y in range(360, 460, 3)])                      # can colour separate it?
 """
 import numpy as np
+from scipy import ndimage as nd
 from PIL import Image, ImageDraw
 
 from .sheet import Sheet
@@ -191,3 +192,110 @@ def keep(path=None, **arrays):
     if path:
         np.savez_compressed(path, **{k: np.asarray(v) for k, v in arrays.items()})
     return path
+
+
+CLASS_COLOURS = {'bg': (235, 235, 255), 'skin': (255, 225, 195), 'shadow': (205, 155, 120), 'white': (215, 215, 215),
+                 'pink': (255, 120, 160), 'blush': (255, 190, 200), 'amber': (255, 170, 0), 'brown': (140, 80, 0),
+                 'hair': (200, 60, 60), 'shine': (255, 0, 255), 'jacket': (40, 40, 140), 'line_soft': (120, 120, 255),
+                 'line': (0, 0, 255), 'strand': (0, 180, 0), 'black': (0, 0, 0)}
+
+
+def classmap(parts, box=None, colours=None):
+    """The colour classes from prep as one picture: each class in its own colour, later ones in `colours` on
+    top (so lines and black win). `box` (x0, y0, x1, y1) crops it. Unknown classes are skipped."""
+    colours = colours or CLASS_COLOURS
+    names = list(parts.keys()) if hasattr(parts, 'keys') else list(parts.files)
+    h, w = parts[names[0]].shape
+    x0, y0, x1, y1 = [int(v) for v in (box or (0, 0, w, h))]
+    o = np.full((y1 - y0, x1 - x0, 3), 255, np.uint8)
+    for k, c in colours.items():
+        if k in names:
+            o[np.asarray(parts[k], bool)[y0:y1, x0:x1]] = c
+    return Image.fromarray(o)
+
+
+def _ref_at(ref, shape):
+    im = _img(ref).convert('RGB')
+    return im if im.size == (shape[1], shape[0]) else im.resize((shape[1], shape[0]), Image.LANCZOS)
+
+
+def triptych(ref, drawn, parts, pts, half=90, offset=(0, 0), zoom=2, out=None):
+    """Reference | drawing | colour classes round each point (x, y in reference px, at the classes' size), one
+    row per point: the first look at a pinned comment or a missing part. If the classes are right and the drawing
+    is wrong, the bug is in drawing; if the classes are wrong, it is in prep or detection. `offset` is where
+    reference (0, 0) lands on the drawing (the panel margin)."""
+    names = list(parts.keys()) if hasattr(parts, 'keys') else list(parts.files)
+    shape = parts[names[0]].shape
+    r, d = _ref_at(ref, shape), _img(drawn).convert('RGB')
+    hw, ox, oy = int(half * 16 / 9), offset[0], offset[1]
+    rows = []
+    for x, y in pts:
+        b = (int(x) - hw, int(y) - half, int(x) + hw, int(y) + half)
+        row = Image.new('RGB', (3 * 2 * hw, 2 * half), 'white')
+        row.paste(r.crop(b), (0, 0)); row.paste(d.crop((b[0] + ox, b[1] + oy, b[2] + ox, b[3] + oy)), (2 * hw, 0))
+        row.paste(classmap(parts, b), (4 * hw, 0))
+        rows.append(row)
+    c = Image.new('RGB', (rows[0].width, sum(rw.height for rw in rows)), 'white')
+    for k, rw in enumerate(rows):
+        c.paste(rw, (0, k * rows[0].height))
+    c = c.resize((c.width * zoom, c.height * zoom), Image.NEAREST)
+    if out:
+        c.save(out)
+    return c
+
+
+def beside(ref, drawn, boxes, offset=(0, 0), size=None, gap=6, out=None):
+    """For each box (reference px): the reference and the drawing side by side, stacked down the sheet. With one
+    box per figure (the brows of every face, every ear) it is the whole-sheet check: are all of them right, not
+    just the one a comment pointed at? `size` is the reference's size when it differs from the image file's."""
+    d = _img(drawn).convert('RGB')
+    r = _ref_at(ref, (size[1], size[0])) if size else _img(ref).convert('RGB')
+    ox, oy = offset
+    rows = []
+    for bx in boxes:
+        b = tuple(int(round(v)) for v in bx)
+        a, p = r.crop(b), d.crop((b[0] + ox, b[1] + oy, b[2] + ox, b[3] + oy))
+        rw = Image.new('RGB', (2 * a.width + gap, a.height), 'white'); rw.paste(a, (0, 0)); rw.paste(p, (a.width + gap, 0))
+        rows.append(rw)
+    W = max(rw.width for rw in rows)
+    c = Image.new('RGB', (W, sum(rw.height + gap for rw in rows) - gap), (255, 0, 0))
+    y = 0
+    for rw in rows:
+        c.paste(rw, (0, y)); y += rw.height + gap
+    if out:
+        c.save(out)
+    return c
+
+
+def boxes_of(mask, pad=10, min_px=1):
+    """A box (x0, y0, x1, y1) round each connected piece of `mask`, `pad` px wider, ordered row by row: feed it
+    to `beside` or `strip` to see every iris, every brow, every detected thing at once."""
+    lab, n = nd.label(np.asarray(mask, bool))
+    out = []
+    for k, sl in enumerate(nd.find_objects(lab), 1):
+        if (lab[sl] == k).sum() >= min_px:
+            out.append((sl[1].start - pad, sl[0].start - pad, sl[1].stop + pad, sl[0].stop + pad))
+    h = max((b[3] - b[1] for b in out), default=1)
+    return sorted(out, key=lambda b: (b[1] // h, b[0]))
+
+
+def run_until(script, marker, **env):
+    """Run a drawing script up to the line holding `marker` and return its variables, without drawing the rest.
+    Detection (brows, irises, mouths) is decided before any ink, so it can be tried in seconds instead of the
+    whole build: `ns = tools.run_until('panel.py', '# ---- each brow'); ns['brows']`. Runs in the script's own
+    folder, with that folder on sys.path. `env` adds variables before the run."""
+    import os, sys
+    script = os.path.abspath(script)
+    src = open(script).read()
+    k = src.find(marker)
+    if k < 0:
+        raise ValueError(f'{marker!r} not in {script}')
+    src = src[:src.rfind('\n', 0, k) + 1]
+    here, cwd = os.path.dirname(script), os.getcwd()
+    ns = {'__name__': '__run_until__', '__file__': script, **env}
+    sys.path.insert(0, here); os.chdir(here)
+    try:
+        exec(compile(src, script, 'exec'), ns)
+    finally:
+        os.chdir(cwd); sys.path.remove(here)
+    return ns
