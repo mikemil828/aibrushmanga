@@ -162,12 +162,14 @@ def _font(size_px, bold=True, face=None):
     names = ['DejaVuSans-Bold.ttf', 'FreeSansBold.ttf'] if bold else ['DejaVuSans.ttf', 'FreeSans.ttf']
     if face:
         names = [os.path.join(FONTS, FACES.get(face, face))] + names
+    # the bundled face last, so a system without DejaVu/FreeSans (Windows, macOS) still letters at the asked size
+    names.append(os.path.join(FONTS, FACES['dialogue']))
     for n in names:
         try:
             return ImageFont.truetype(n, int(size_px))
         except OSError:
             continue
-    return ImageFont.load_default()
+    return ImageFont.load_default(int(size_px))
 
 
 def caption(sheet, xy, text, size_mm=3.6, pad_mm=1.6, box=True, bold=True, face=None):
