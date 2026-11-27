@@ -27,10 +27,12 @@ that changes gets the black and the care.
 
 ## Weak spots
 
-- The thick brows are a little blocky next to the reference's wedges, and where a brow meets the lash band
-  (the angry face) the two run together into one black shape.
-- The half-closed eyes (smug, sulking) are small, and their irises come out mostly dark.
-- Fringe tips collect small black wedges where the reference's outlines meet.
+- On the smug face the right eye's catch-light sits under the lid; it is lost, and a small black dot is left
+  beside the iris.
+- The thin, hair-coloured brows of the smug face are mostly hidden by the fringe in the reference and come out
+  as two small hooks.
+- The half-closed irises are a flat light tone with a pupil: readable, but without the lid's shadow the big
+  eyes have.
 - The shirt is deliberately plain; its folds are a pale tone, not drawn cloth.
 
 `ref.png` is not covered by the code's license: see `REF-LICENSE.txt`.
