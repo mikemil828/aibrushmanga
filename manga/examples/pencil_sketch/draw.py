@@ -93,7 +93,7 @@ iris = {}
 for e in 'lr':
     c = h['eye_' + e]
     rx, ry = h['eye_size_' + e]
-    sk.ellipse(sh, c, rx, ry, rot=TILT, passes=1, seed=50 + (e == 'r'))
+    sk.curve(sh, h['eye_shape_' + e] + h['eye_shape_' + e][:1], 0.4, 50 + (e == 'r'))
     iris[e] = ((c[0] - 0.1 * rx, c[1] + 0.05 * ry), 0.62 * rx, 0.95 * ry)
     sk.ellipse(sh, iris[e][0], iris[e][1], iris[e][2], rot=TILT, pressure=0.3, passes=1, seed=52 + (e == 'r'))
 # bangs: clumps of uneven size and length (a tutorial's advice: vary size, shape and direction), as
@@ -116,38 +116,42 @@ openings, irises = {}, {}
 for e in 'lr':
     c = h['eye_' + e]
     rx, ry = h['eye_size_' + e]
-    near = (e == 'l')                                   # turn > 0: the viewer's left eye is the near one
-    outer = 180 if e == 'l' else 0
-    # eye opening: upper lid arc a little flatter than the construction ellipse, lower lid shallow
-    up = arc(c, rx * 1.02, ry * 1.0, 190, 350, 20, TILT)
-    lo = arc((c[0], c[1] - 0.15 * ry), rx * 0.92, ry * 0.9, 25, 155, 16, TILT)
-    opening = poly_mask(up + lo)
+    # the lids come from the construction (inner corner to outer), so the opening is the one the head
+    # helper built for this turn: wider and rounder on the near eye, narrower on the far one
+    U, Lo = np.array(h['eye_upper_' + e]), np.array(h['eye_lower_' + e])
+    n = len(U)
+    w = np.linspace(0, 1, n)                            # 0 at the inner corner, 1 at the outer
+    out_dir = np.sign(U[-1, 0] - U[0, 0])               # which way the outer corner lies on the page
+    opening = poly_mask([tuple(p) for p in U] + [tuple(p) for p in Lo[::-1]])
     openings[e] = opening
+    # lash band along the upper lid: thin at the inner corner, heaviest at the outer, plus a flick
+    band_o = [(x + out_dir * 0.06 * rx * wi, y - (0.04 + 0.08 * wi) * ry) for (x, y), wi in zip(U, w)]
+    # its lower edge never drops below 60% of the way down the opening, so the outer end tapers into the corner
+    band_i = [(x, y + min((0.1 + 0.26 * wi) * ry, 0.6 * (ly - y))) for (x, y), (_, ly), wi in zip(U, Lo, w)]
+    band_m = poly_mask(band_o + band_i[::-1])
     # iris clipped to the opening, black under the lid, tone fading down, pupil and two catch-lights
+    # the iris sits on the lower lid (where its middle crosses it) and runs up under the upper lid
     ic, irx, iry = iris[e]
+    lo_y = np.interp(ic[0], *(Lo[::1 if Lo[-1, 0] > Lo[0, 0] else -1].T))
+    ic = (ic[0], lo_y - 0.88 * iry)
     iris_m = poly_mask(arc(ic, irx, iry, 0, 360, 40, TILT)) & opening
     irises[e] = iris_m
     pupil_m = poly_mask(arc((ic[0], ic[1] + 0.05 * iry), 0.3 * irx, 0.42 * iry, 0, 360, 24, TILT))
-    lights = (poly_mask(arc((ic[0] - 0.32 * irx, ic[1] - 0.3 * iry), 0.26 * irx, 0.2 * iry, 0, 360, 20)) |
-              poly_mask(arc((ic[0] + 0.35 * irx, ic[1] + 0.38 * iry), 0.1 * irx, 0.08 * iry, 0, 360, 12)))
+    # catch-lights just below the lash band (the iris now runs up under it), never on top of it
+    lights = (poly_mask(arc((ic[0] - 0.32 * irx, ic[1] - 0.08 * iry), 0.26 * irx, 0.2 * iry, 0, 360, 20)) |
+              poly_mask(arc((ic[0] + 0.35 * irx, ic[1] + 0.45 * iry), 0.1 * irx, 0.08 * iry, 0, 360, 12))) & ~band_m
     face.manga_iris(sh, iris_m, pupil=pupil_m, lights=lights, solid=0.3, fade=0.92, peak=0.72, pupil_r=0.16,
                     sparkles=0, rim=0.7, seed=3)
-    sh.fill(poly_mask(arc((ic[0], ic[1] + 0.05 * iry), 0.3 * irx, 0.42 * iry, 0, 360, 24, TILT)) & iris_m & ~lights)
-    # lash band: a crescent, heaviest at the outer corner, plus a flick
-    band_o = arc((c[0], c[1] - 0.06 * ry), rx * 1.08, ry * 1.12, 185, 352, 24, TILT)
-    w = np.linspace(1, 0, 24) if e == 'l' else np.linspace(0, 1, 24)
-    band_i = [(x, y + (0.16 + 0.22 * wi) * ry) for (x, y), wi in zip(arc(c, rx * 1.0, ry * 1.0, 185, 352, 24, TILT), w)]
-    sh.fill(face.ink_shape(sh, poly_mask(band_o + band_i[::-1]), 1.0) if hasattr(face, 'ink_shape') else
-            poly_mask(band_o + band_i[::-1]))
-    oc = band_o[0] if e == 'l' else band_o[-1]
-    dx = -1 if e == 'l' else 1
-    sh.stroke([oc, (oc[0] + dx * 0.25 * rx, oc[1] - 0.05 * ry), (oc[0] + dx * 0.42 * rx, oc[1] - 0.22 * ry)],
+    sh.fill(pupil_m & iris_m & ~lights)
+    sh.fill(band_m)
+    oc = band_o[-1]
+    sh.stroke([oc, (oc[0] + out_dir * 0.25 * rx, oc[1] - 0.05 * ry), (oc[0] + out_dir * 0.42 * rx, oc[1] - 0.22 * ry)],
               pen='g_pen', pressure=0.85, taper=(0.3, 1.6))
-    # crease above the lid, lower lid as a short light stroke, inner corner tick
-    sh.stroke(arc((c[0], c[1] - 0.32 * ry), rx * 0.95, ry * 0.9, 205 if e == 'l' else 240,
-                  300 if e == 'l' else 335, 10, TILT), pen='maru', pressure=0.45)
-    sh.stroke(arc((c[0], c[1] - 0.15 * ry), rx * 0.92, ry * 0.9, 50, 120, 10, TILT)[::-1], pen='maru',
-              pressure=0.5, taper=(1.0, 1.0))
+    # crease: the upper lid lifted, over its outer two thirds; lower lid: a light stroke along its middle
+    k0, k1 = int(0.3 * n), int(0.92 * n)
+    sh.stroke([(x, y - 0.32 * ry) for x, y in U[k0:k1]], pen='maru', pressure=0.45)
+    k0, k1 = int(0.3 * n), int(0.8 * n)
+    sh.stroke([tuple(p) for p in Lo[k0:k1]], pen='maru', pressure=0.5, taper=(1.0, 1.0))
     # brow: one thin stroke, thick at the head (toward the centre line)
     b = h['brow_' + e]
     bpts = arc((b[0], b[1] + 0.25 * R), rx * 1.25, 0.32 * R, 235 if e == 'l' else 245, 295 if e == 'l' else 305,

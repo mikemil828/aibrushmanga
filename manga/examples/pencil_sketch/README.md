@@ -59,6 +59,15 @@ its front, set back from the nose line by about a quarter of the cranium radius.
 corner steeply and rounds off toward the chin, so the near jaw bows a little instead of running ruler-straight
 from the ear; the chin keeps its point. The example's neck now starts on the jaw line, so it tucks under it.
 
+Third pass. `head` now also returns the lids themselves, `eye_upper_l/r` and `eye_lower_l/r` (inner corner to
+outer): the upper lid full and arched, highest toward the outer corner, the lower one shallower. The construction
+eyes are a little larger (manga proportions), and this example inks the opening, lash band, crease, lower lid
+and iris straight from those curves, so the inked eye is the constructed one (the iris sits on the lower lid
+and the catch-lights stay below the lash band). On the side turned away, the outline is now the limb of the
+cheek: across each height the face rounds from the profile out to the cheek contour, and the outline is where
+that stands out furthest. It follows the cheekbone and curves in to the chin. Near profile it hands back to the
+contour, so nose and lips still show.
+
 ## Weak spots (honest list)
 
 - Beyond those few shadows the face is flat; there is no form shading on cheek or jaw.
@@ -66,7 +75,8 @@ from the ear; the chin keeps its point. The example's neck now starts on the jaw
 - The ring of light on the hair has a regular sawtooth edge.
 - The shoulders are plain; there is no body under the collar.
 - The far side lock bulges outward just below the crown.
-- The far cheek, from the cheekbone down to the chin, is still close to a straight line.
-- The construction's eye opening is a plain lens with sharp corners; it gives the placement and the
-  foreshortening, not the lid shapes, which are still inked by hand from it.
+- The far eye's outer corner, where the lids wrap round the eyeball, ends in a short vertical edge; it reads
+  as lashes here, but a hand would round it.
+- The iris now fills most of the opening and runs up under the lash band, so its dark top is hidden.
+- In a true three-quarter view the far cheek is still only gently curved.
 - No hairline or neck in the construction itself; the neck is still placed by the example.

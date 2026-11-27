@@ -66,7 +66,7 @@ CHEEK = [(0.82, HEAD['brow'], 0.55), (0.81, 0.45, 0.42), (0.76, 0.8, 0.22), (0.6
 JAW = [(0.69, 1.02, 0.02), (0.64, 1.16, 0.2), (0.5, 1.31, 0.4), (0.3, 1.43, 0.58), (0.13, 1.49, 0.7),
        (0.0, HEAD['chin'], 0.76)]
 RAMUS = (0.8, 0.8, -0.1)          # the back of the jaw rises from its corner to just under the ear
-EYE_SPAN, EYE_OUT, EYE_SET = 65.0, 22.0, 1.1    # half-width of the opening on the ball (deg), outward aim, depth
+EYE_SPAN, EYE_OUT, EYE_SET, EYE_LOW = 65.0, 22.0, 1.1, 0.8  # opening half-width on the ball (deg), outward aim, depth, lower lid
 FACE_CURVE = 0.9     # how fast the front of the face falls back toward the sides: z = profile - FACE_CURVE * x^2
 
 
@@ -125,7 +125,8 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
 
     Returns a dict of constructed points for inking: 'eye_l', 'eye_r' (centres, viewer's left/right),
     'eye_size' (rx, ry) facing us and 'eye_size_l', 'eye_size_r' foreshortened by the turn, 'eye_vis_l',
-    'eye_vis_r', 'brow_l', 'brow_r', 'nose', 'mouth', 'chin', 'jaw' (the face outline, viewer's left side
+    'eye_vis_r', 'eye_shape_l/r' (opening outline), 'eye_upper_l/r' and 'eye_lower_l/r' (lids, inner corner to
+    outer, None when hidden), 'brow_l', 'brow_r', 'nose', 'mouth', 'chin', 'jaw' (the face outline, viewer's left side
     top to chin, then the right side back up; on the far side it follows the profile of brow, nose, mouth and
     chin wherever that stands out past the cheek), 'ear_l', 'ear_r' (centres, None when hidden), 'ear_shape_l',
     'ear_shape_r' (outlines), 'side_l', 'side_r' (side-plane discs, None when facing away), 'centre' (centre
@@ -197,15 +198,19 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
     # ball and faces forward and a little outward (EYE_OUT), so the outer corner sits further back than the
     # inner one. Its outline on the page is the hull of the projected lids: an almond facing us, a wedge
     # opening toward the nose in profile, set back from the nose line by the socket's depth.
-    eye_dx, ex, ey = 0.42, 0.28, 0.23
+    eye_dx, ex, ey = 0.42, 0.3, 0.29
     out['eye_size'] = (ex * r, ey * r)
     span = np.deg2rad(EYE_SPAN)
     re = ex / np.sin(span)                                   # ball radius so the opening is 2 ex wide facing us
     for e, sx in (('l', -1), ('r', 1)):
         x = sx * eye_dx
         p, vis = P(x, HEAD['eye'])
-        phi = np.linspace(-span, span, 15)                   # across the opening, inner corner (-) to outer (+)
-        lid = np.sin(np.linspace(0, np.pi, 15))
+        phi = np.linspace(-span, span, 21)                   # across the opening, inner corner (-) to outer (+)
+        tt = np.linspace(0, 1, 21)
+        # manga lids: the upper one full and arched, highest a little toward the outer corner; the lower
+        # one shallower, lowest a little toward the inner corner
+        lid_up = np.sin(np.pi * tt ** 0.85) ** 0.6
+        lid_lo = np.sin(np.pi * tt ** 1.15) ** 0.8
         a = phi + np.deg2rad(EYE_OUT)                       # aim of each lid point round the ball, from forward
         # shift the ball inward so that, facing us, the opening is centred on the eye's place on the face
         bx = x - sx * re * (np.sin(a[-1]) + np.sin(a[0])) / 2
@@ -213,8 +218,8 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         ball = np.array([bx, HEAD['eye'], zc])
         lx = ball[0] + sx * re * np.sin(a)
         lz = ball[2] + re * np.cos(a)
-        up = np.stack([lx, ball[1] - ey * lid, lz], 1)
-        lo = np.stack([lx, ball[1] + 0.7 * ey * lid, lz], 1)
+        up = np.stack([lx, ball[1] - ey * lid_up, lz], 1)
+        lo = np.stack([lx, ball[1] + EYE_LOW * ey * lid_lo, lz], 1)
         # the cornea bulges a little in front of the ball between the lids: in profile the front of the
         # opening rounds forward instead of being cut off flat
         cy_ = np.linspace(-0.8 * ey, 0.55 * ey, 7)
@@ -234,6 +239,13 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         out['eye_vis_' + e] = bool(vis)
         out['eye_size_' + e] = (ex * r * max(shrink, 0.15), ey * r * max(abs(cp), 0.5))
         out['eye_shape_' + e] = [tuple(q) for q in hull] if vis else None
+        # the lids themselves, inner corner to outer, only where the ball under them faces us (in profile
+        # the half toward the nose turns edge-on and drops out, leaving the wedge's two sides)
+        nrm = np.stack([np.sin(a) * sx, np.zeros_like(a), np.cos(a)], 1)
+        show = facing(nrm) > -0.05
+        for name, lid3 in (('upper', up), ('lower', lo)):
+            q = proj(lid3)[0][show]
+            out['eye_%s_%s' % (name, e)] = [tuple(v) for v in q] if vis and len(q) > 1 else None
         out['brow_' + e] = tuple(P(x, HEAD['brow'])[0])
     for k in ('nose', 'mouth', 'chin'):
         out[k] = tuple(P(0.0, HEAD[k])[0])
@@ -259,7 +271,25 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
     far = 'r' if turn > 0 else 'l'
     s_out = 1.0 if far == 'r' else -1.0
     if abs(turn) > 1e-6:
-        # on the side turned away the jaw corner drops behind the cheek: the silhouette is the outer envelope
+        # On the side turned away the outline is the limb of the cheek, not its edge: across each height the
+        # face rounds from the centre line (profile depth) out to the cheek/jaw contour like a quarter
+        # ellipse, and the outline is where that cross-section stands out furthest on the page. It follows
+        # the cheekbone and swings in toward the chin as a curve, where the bare contour gave a ruler line.
+        sxf = 1.0 if far == 'r' else -1.0
+        # The search starts 45 degrees off the centre line (the centre is the profile, added below with its nose
+        # and lips) and narrows to the contour itself as the head nears profile, where the cheek falls behind
+        # the nose and lips and the full cross-section would hide them.
+        th0 = np.deg2rad(45 + 45 * np.clip((abs(turn) - 0.6) / 0.3, 0, 1))
+        th = np.linspace(th0, np.pi / 2, 24)
+        limb = []
+        for xe, ye, ze in contour:
+            zf = np.interp(ye, *PROFILE)
+            w = abs(xe)
+            cand = np.stack([sxf * w * np.sin(th), np.full_like(th, ye), ze + (zf - ze) * np.cos(th)], 1)
+            q = proj(cand)[0]
+            limb.append(q[np.argmax((q - c) @ right * s_out)])
+        sides[far] = np.array(limb)
+        # the jaw corner drops behind the cheek: keep the outer envelope
         down = np.array([-sr, cr])
         rel = sides[far] - c
         dn, ou = rel @ down, rel @ right * s_out

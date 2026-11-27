@@ -401,6 +401,15 @@ def test_head_side_planes_and_profile():
     shape = np.array(prof['eye_shape_l'])
     assert prof['nose'][0] - shape[:, 0].max() > 15                    # well behind the nose line (r = 100)
     assert shape[:, 1].max() - shape[:, 1].min() > 1.5 * np.ptp(shape[:, 0][shape[:, 0] > shape[:, 0].max() - 3])
+    # lids come back inner corner to outer, the upper above the lower, on the eye facing us
+    up, lo = np.array(front['eye_upper_r']), np.array(front['eye_lower_r'])
+    assert up[-1, 0] > up[0, 0] and up[len(up) // 2, 1] < front['eye_r'][1] < lo[len(lo) // 2, 1]
+    # the far cheek on a turned head is a curve, not a ruler line: its middle stands out past the chord
+    t3f = np.array(sketch.head(sh, (300, 250), 100, turn=0.3, draw=False)['jaw'])
+    far = t3f[(t3f[:, 0] > 300) & (t3f[:, 1] > 260) & (t3f[:, 1] < 380)]
+    a, b = far[np.argmin(far[:, 1])], far[np.argmax(far[:, 1])]
+    d = b - a
+    assert min((d[0] * (p - a)[1] - d[1] * (p - a)[0]) / np.linalg.norm(d) for p in far) < -5.5        # -4.5 with the bare contour
     # the near jaw bows outward: on a turned head it stands well outside the straight line from corner to chin
     t3 = sketch.head(sh, (300, 250), 100, turn=0.3, draw=False)
     jaw = np.array(t3['jaw'])
