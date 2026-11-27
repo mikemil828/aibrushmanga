@@ -31,6 +31,12 @@ sh.close()
 
 Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page_print.png` (add `--bw` for pure 1-bit).
 
+For a home or office laser printer, render for its resolution and print the PNG at 100 % ("actual size"):
+`python -m manga.replay page.jsonl --dpi 600 --fit letter --bw --out page_600dpi.png`. `--dpi` snaps every
+screen to a whole-pixel cell with a fixed threshold order, so all dots come out the same; an unsnapped 1-bit
+screen has dots of slowly drifting shape, which a laser printer shows as a woven pattern. `--fit` (letter, a4,
+b4, legal) shrinks the page to the paper; leave it out to print at the page's own size.
+
 ## Tools
 
 | Module | What it does |
@@ -47,7 +53,7 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 | `water` | Still water: `calm_level` (line tone without streaks from things standing in it), `fill_under` (no halos around them), `mirror` (reflections), `ripples`. Use `angle=water.HORIZONTAL` for line tone. |
 | `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference), `pin` (the page round a review comment pinned at x%, y%, beside the same area of the reference), `cut_parts` (what a panel edge or cut takes off a figure: a sawn-off finger shows up as a small loss from a big piece). `layers` (reference, drawing and masks side by side), `before_after` (a review round on one sheet), `strip` (one part of every figure in a grid), `probe` (colour and classes along a line), `keep` (save a script's masks when `DUMP` is set). |
 | `face` | The parts an expression is made of: `brow` (a tapered solid shape; `ribbon_of` measures one from a mask), `iris` (cel layers, rim, streaks, pupil, catch-lights), `eye_white` (the lid's shadow), `open_mouth` (black inside, toned tongue with a darker core, paper teeth with shaded corners, one lip line), `blush` (slanted hatching), `blush_tone` (a graded tone that fades out at its edge), `gloom` (vertical line tone for dread), `sweat`, `closed_eye`, `closed_smile`. See `examples/expressions`. |
-| `replay` | `python -m manga.replay journal.jsonl --scale S --out file.png [--bw] [--until N]` |
+| `replay` | `python -m manga.replay journal.jsonl --scale S --out file.png [--bw] [--until N]`, or `--dpi 600 [--fit letter] --bw` for a printer |
 
 ## Workflow that has worked
 

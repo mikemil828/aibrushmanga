@@ -320,3 +320,36 @@ def test_halo_clears_paper_round_a_figure():
     assert ring[55, 100] and not ring[100, 100] and not ring[40, 100]
     if a is not None:
         assert a[55, 95:105].min() > 200 and a[30:50, 30:50].min() < 120
+
+
+def test_snapped_screen_repeats_exactly_and_keeps_its_level():
+    # 1-bit print: a fractional cell makes dots of drifting shape (a woven pattern on a laser printer)
+    import importlib
+    from scipy import ndimage as nd
+    T = importlib.import_module('manga.tone')
+    ppm = 600 / 25.4
+    lpi, ang = T.snap_screen(60, 45, ppm)
+    assert abs(lpi - 60) < 1.5 and ang == 45
+    for lv in (0.1, 0.3, 0.5, 0.7):
+        c = T.screen(lv, (400, 400), ppm, lpi=60, angle=45, snap=True)
+        assert set(np.unique(c)) <= {0.0, 1.0}
+        assert abs(c.mean() - lv) < 0.02
+        assert nd.gaussian_filter(c, 12)[50:-50, 50:-50].std() < 1e-3
+
+
+def test_replay_for_a_printer(tmp_path):
+    import subprocess, sys, os
+    from PIL import Image
+    from manga import tone
+    j = tmp_path / 'p.jsonl'
+    sh = Sheet(240, 320, px_per_mm=8.0, journal=str(j))
+    tone(sh, np.ones((320, 240), bool), level=0.4, lpi=60)
+    sh.close()
+    out = tmp_path / 'p.png'
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    subprocess.run([sys.executable, '-m', 'manga.replay', str(j), '--dpi', '300', '--fit', 'a4', '--bw',
+                    '--out', str(out)], check=True, cwd=root, capture_output=True)
+    im = Image.open(out)
+    assert im.mode == '1' and round(im.info['dpi'][0]) == 300
+    assert abs(im.width - round(30 / 25.4 * 300)) <= 1          # 30 mm wide page, fits A4, so no shrink
+    assert abs((1 - np.asarray(im, np.float32)).mean() - 0.4) < 0.03

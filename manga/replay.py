@@ -28,7 +28,11 @@ def _mask(jdir, m):
     return _load_array(jdir, m['file'])
 
 
-def replay(path, scale=1.0, until=None, progress=False):
+# paper sizes in mm, for --fit
+PAPERS = {'letter': (215.9, 279.4), 'a4': (210.0, 297.0), 'b4': (257.0, 364.0), 'legal': (215.9, 355.6)}
+
+
+def replay(path, scale=1.0, until=None, progress=False, snap=False):
     jdir = path + '.d'
     sh = None
     clips = []
@@ -43,6 +47,7 @@ def replay(path, scale=1.0, until=None, progress=False):
                 sh = Sheet(d['width'], d['height'], d['px_per_mm'], tuple(d['paper']), tuple(d['ink']),
                            seed=d['seed'], scale=scale)
                 sh._replaying = True
+                sh.snap_screens = snap
             elif op == 'stroke':
                 sh._n += 1
                 sh.stats['strokes'] += 1
@@ -85,10 +90,25 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--bw', action='store_true', help='pure 1-bit black and white output')
     ap.add_argument('--until', type=int, default=None, help='stop before this journal line')
+    ap.add_argument('--dpi', type=float, default=None,
+                    help="printer resolution, e.g. 600: renders for that printer (sets the scale, tags the PNG, "
+                         "snaps screens to whole pixels). Print the PNG at 100%%/actual size.")
+    ap.add_argument('--fit', choices=sorted(PAPERS), default=None,
+                    help='with --dpi: shrink the page to fit this paper (0.25 in margins) instead of its own size')
     a = ap.parse_args()
     t = time.time()
-    sh = replay(a.journal, a.scale, a.until, progress=True)
-    sh.png(a.out, bw=a.bw)
+    scale = a.scale
+    if a.dpi:
+        with open(a.journal, encoding='utf-8') as f:
+            d = json.loads(f.readline())
+        w_mm, h_mm = d['width'] / d['px_per_mm'], d['height'] / d['px_per_mm']
+        shrink = 1.0
+        if a.fit:
+            pw, ph = PAPERS[a.fit]
+            shrink = min(1.0, (pw - 12.7) / w_mm, (ph - 12.7) / h_mm)
+        scale = a.dpi / 25.4 * shrink / d['px_per_mm']
+    sh = replay(a.journal, scale, a.until, progress=True, snap=bool(a.dpi or a.bw))
+    sh.png(a.out, bw=a.bw, dpi=a.dpi)
     print(f'{a.out}: {sh.W}x{sh.H}, {sh.stats["strokes"]} strokes, {time.time() - t:.0f}s')
 
 

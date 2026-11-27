@@ -35,8 +35,16 @@ def _threshold(kind, level):
     return np.interp(q, np.linspace(0, 1, len(f)), f).astype(np.float32)
 
 
-def screen(level, shape, px_per_mm, lpi=42.0, angle=45.0, kind='dot', phase=(0.0, 0.0), origin=(0, 0), k=1.0):
-    """Ink coverage of a screen for a level map (scalar or array the size of `shape`)."""
+def screen(level, shape, px_per_mm, lpi=42.0, angle=45.0, kind='dot', phase=(0.0, 0.0), origin=(0, 0), k=1.0,
+           snap=False):
+    """Ink coverage of a screen for a level map (scalar or array the size of `shape`).
+
+    snap -- for 1-bit print: the screen is first nudged to a whole-pixel cell (snap_screen), and each
+            pixel of the cell gets its own rank, so a level inks the same pixels in every cell (a
+            threshold matrix). Coverage is then 0 or 1 and steps by one pixel per cell.
+    """
+    if snap:
+        lpi, angle = snap_screen(lpi, angle, px_per_mm)
     H, W = shape
     period = 25.4 / lpi * px_per_mm
     a = np.deg2rad(angle)
@@ -46,6 +54,8 @@ def screen(level, shape, px_per_mm, lpi=42.0, angle=45.0, kind='dot', phase=(0.0
     Y += 0.5 + origin[1] * k
     u = (X * ca + Y * sa) / period + phase[0]
     v = (-X * sa + Y * ca) / period + phase[1]
+    if snap:
+        return _ranked(kind, u, v, level)
     f = _spot(kind, u, v).astype(np.float32)
     if kind == 'dot':
         g = (np.pi / period) * np.sqrt(np.sin(2 * np.pi * u) ** 2 + np.sin(2 * np.pi * v) ** 2)
@@ -57,6 +67,40 @@ def screen(level, shape, px_per_mm, lpi=42.0, angle=45.0, kind='dot', phase=(0.0
     cov = np.clip((f - T) / g + 0.5, 0, 1)
     cov = np.where(lv <= 0.003, 0.0, np.where(lv >= 0.997, 1.0, cov))
     return cov.astype(np.float32)
+
+
+def _ranked(kind, u, v, level):
+    # cell position of each pixel, rounded so that every cell repeats exactly
+    ku = np.round(np.mod(u, 1.0) * 4096).astype(np.int64) % 4096
+    kv = np.round(np.mod(v, 1.0) * 4096).astype(np.int64) % 4096
+    if kind == 'line':
+        kv[:] = 0                                   # a line inks whole rows at once
+    key = ku * 4096 + kv
+    uk, inv = np.unique(key, return_inverse=True)
+    fu, fv = (uk // 4096) / 4096.0, (uk % 4096) / 4096.0
+    f = _spot(kind, fu, fv)
+    tie = ((uk * 2654435761) % 1000003) / 1000003.0   # fixed order among equal spot values
+    order = np.lexsort((tie, -f))                     # highest spot value inks first
+    rank = np.empty(len(uk), np.float64)
+    rank[order] = (np.arange(len(uk)) + 0.5) / len(uk)
+    thr = rank[inv.reshape(u.shape)]
+    lv = np.asarray(level, np.float32)
+    return (thr < lv).astype(np.float32)
+
+
+def snap_screen(lpi, angle, px_per_mm):
+    """Nudge a screen so its cell steps a whole number of pixels: (lpi, angle) closest to the asked ones.
+
+    For 1-bit print output. A cell that steps a fractional number of pixels thresholds into dots of
+    slowly varying shape, which a laser printer shows as a woven pattern; a whole-pixel cell repeats
+    exactly. At 600 dpi a 60 lpi 45-degree screen becomes 60.6 lpi, a change no one can see.
+    """
+    period = 25.4 / lpi * px_per_mm
+    a = np.deg2rad(angle)
+    p, q = int(round(period * np.cos(a))), int(round(period * np.sin(a)))
+    if p == 0 and q == 0:
+        return lpi, angle
+    return 25.4 * px_per_mm / float(np.hypot(p, q)), float(np.degrees(np.arctan2(q, p)))
 
 
 def noise_screen(level, shape, px_per_mm, grain_mm=0.12, seed=0):
@@ -127,7 +171,8 @@ def _tone(sheet, mask, level, lpi, angle, kind, phase, mode, seed, grain_mm):
     if kind == 'noise':
         cov = _noise_region(sheet, lv, grain_mm, seed, y0, y1, x0, x1)
     else:
-        cov = screen(lv, shape, sheet.ppm, lpi, angle, kind, phase, origin=(x0 / sheet.k, y0 / sheet.k), k=sheet.k)
+        cov = screen(lv, shape, sheet.ppm, lpi, angle, kind, phase, origin=(x0 / sheet.k, y0 / sheet.k), k=sheet.k,
+                     snap=getattr(sheet, 'snap_screens', False))
     cov = cov * m[y0:y1, x0:x1]
     sheet._put(cov, x0, y0, mode)
 

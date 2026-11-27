@@ -246,11 +246,13 @@ class Sheet:
         rgb = p * (1 - a[..., None]) + q * a[..., None]
         return Image.fromarray(np.clip(rgb + 0.5, 0, 255).astype(np.uint8))
 
-    def png(self, path, bw=False, crop=None):
+    def png(self, path, bw=False, crop=None, dpi=None):
         im = self.image(bw)
         if crop:
             im = im.crop(tuple(int(round(v * self.k)) for v in crop))
-        dpi = self.ppm * 25.4
+        if bw:
+            im = im.convert('L').point(lambda v: 255 if v > 127 else 0).convert('1')
+        dpi = dpi or self.ppm * 25.4
         im.save(path, dpi=(dpi, dpi))
         return path
 
