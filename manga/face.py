@@ -198,28 +198,39 @@ def iris(sh, mask, levels, pupil=None, lights=None, rim=0.6, streaks=7, lpi=60, 
         sh.fill(L, mode='white')
 
 
-def open_mouth(sh, inside, tongue=None, teeth=None, tongue_level=0.3, lpi=60, outline=True, seed=0):
-    """An open mouth: the inside in solid black, the tongue a light tone with its own outline, the teeth left
-    as clean paper. All masks are page px."""
+def open_mouth(sh, inside, tongue=None, teeth=None, tongue_level=0.3, lpi=60, outline=True, seed=0,
+               tongue_core=None, core_level=0.34, teeth_shade=None, shade_level=0.18):
+    """An open mouth: the inside in solid black, the tongue a light tone, the teeth left as clean paper, and one
+    line round the whole opening. `tongue_core` is a darker middle of the tongue (its rim then reads as the
+    lighter edge); `teeth_shade` is the part of the teeth in shadow (the corners). The tongue gets its own line
+    only where it meets the inside of the mouth, so the lip is never drawn twice. All masks are page px."""
     from . import prep
     m = _smooth(inside, 1.0)
-    if m.any():
-        sh.fill(m)
+    whole = m.copy()
+    tg = tt = None
     if tongue is not None and tongue.any():
         tg = _smooth(tongue, 1.0)
-        sh.fill(tg, mode='white')
-        tone(sh, tg, level=tongue_level, lpi=lpi)
-        prep.ink_outline(sh, tg, pen='maru', pressure=(0.5, 0.8), sigma=1.0, min_len=8, seed=seed)
-    whole = m.copy()
-    if tongue is not None:
-        whole |= _smooth(tongue, 1.0)
+        whole |= tg
     if teeth is not None and teeth.any():
         tt = _smooth(teeth, 0.8)
-        sh.fill(tt, mode='white')
         whole |= tt
+    if whole.any():
+        whole = nd.binary_fill_holes(nd.binary_closing(whole, iterations=2))
+    if m.any():
+        sh.fill(m)
+    if tg is not None:
+        sh.fill(tg, mode='white')
+        tone(sh, tg, level=tongue_level, lpi=lpi)
+        if tongue_core is not None and tongue_core.any():
+            tone(sh, _smooth(tongue_core, 1.5) & tg, level=core_level, lpi=lpi)
+        with sh.clip(nd.binary_erosion(whole, iterations=4)):
+            prep.ink_outline(sh, tg, pen='maru', pressure=(0.5, 0.8), sigma=1.0, min_len=8, seed=seed)
+    if tt is not None:
+        sh.fill(tt, mode='white')
+        if teeth_shade is not None and teeth_shade.any():
+            tone(sh, _smooth(teeth_shade, 1.0) & tt, level=shade_level, lpi=lpi)
     if outline and whole.any():
         # the lips: one line round the whole opening, so the teeth are held in
-        whole = nd.binary_fill_holes(nd.binary_closing(whole, iterations=2))
         prep.ink_outline(sh, whole, pen='g_pen', pressure=(0.45, 0.7), sigma=1.2, min_len=10, seed=seed + 1)
 
 
@@ -244,6 +255,20 @@ def blush(sh, center, rx, ry, n=7, slant=-62.0, pen='maru', pressure=0.32, lengt
             run()
     else:
         run()
+
+
+def blush_tone(sh, mask, peak=0.24, soft_px=14, lpi=60, keep=None):
+    """A deep flush as a graded tone: strongest in the middle of `mask` (page px) and fading to paper over
+    `soft_px` at its edge, so the band has no outline. `keep` limits where it may fall (not on eyes or hair)."""
+    m = np.asarray(mask, bool)
+    if not m.any():
+        return
+    d = nd.distance_transform_edt(m)
+    t = np.clip(d / float(soft_px), 0, 1)
+    lv = (peak * t * t * (3 - 2 * t)).astype(np.float32)                # smoothstep: no visible step either end
+    lv = nd.gaussian_filter(lv, 2.0)
+    area = m if keep is None else m & np.asarray(keep, bool)
+    tone(sh, area & (lv > 0.02), level=lv, lpi=lpi)
 
 
 def gloom(sh, mask, level=(0.42, 0.14), lpi=34, lines=18, seed=0):

@@ -27,12 +27,11 @@ that changes gets the black and the care.
 
 ## Weak spots
 
-- On the smug face the right eye's catch-light sits under the lid; it is lost, and a small black dot is left
-  beside the iris.
-- The thin, hair-coloured brows of the smug face are mostly hidden by the fringe in the reference and come out
-  as two small hooks.
-- The half-closed irises are a flat light tone with a pupil: readable, but without the lid's shadow the big
-  eyes have.
+- The laughing mouth's teeth are a thinner band than the reference's, and the tongue's darker upper edge is
+  not drawn.
+- The smug face's right brow tail is placed by hand (it is too faint in the reference to detect), so it would
+  not follow a changed reference.
+- The deep blush's hatching is drawn with hard-ended strokes over a soft tone; the strokes do not fade with it.
 - The shirt is deliberately plain; its folds are a pale tone, not drawn cloth.
 
 `ref.png` is not covered by the code's license: see `REF-LICENSE.txt`.

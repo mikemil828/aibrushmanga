@@ -121,6 +121,8 @@ hair_m = nd.gaussian_filter(nd.binary_closing(mass, iterations=1).astype(np.floa
 DARK = P['black'] | P['maroon']                    # lash bands and mouth insides are black and deep brown
 IRIS = np.zeros_like(mass); LIGHTS = IRIS.copy(); MOUTH = IRIS.copy(); SMALL = IRIS.copy()
 n_ink = 0
+from PIL import Image as _Im
+LUM = np.asarray(_Im.open('ref.png').convert('L').resize((ref.PW, ref.PH), _Im.LANCZOS), np.float32)
 
 with sh.clip(PANEL):
     # 1. skin shadow: one light tone (fringe shadow, neck, lid folds, nose, ears)
@@ -167,11 +169,14 @@ with sh.clip(PANEL):
         strong = [c for c in comps(nd.binary_closing(P['pink'] & cz, iterations=4), 3000)]
         for sl, piece in strong:
             bm = nd.gaussian_filter(hull(whole(sl, piece)).astype(np.float32), 4) > 0.5
-            bm &= ~nd.binary_dilation(P['white'] | P['amber'] | DARK, iterations=3) & ~hair_m
-            tone(sh, full(bm), level=0.14, lpi=LPI)
+            eyes_off = ~nd.binary_dilation(big(P['white'], 150) | P['amber'] | DARK, iterations=3) & ~hair_m
+            bm &= eyes_off
+            # the reference's deep pink sits in a wider, paler flush: the tone fades out across that halo
+            wide = nd.binary_dilation(bm, iterations=22)
+            face.blush_tone(sh, full(wide), peak=0.30, soft_px=40, lpi=LPI, keep=full(eyes_off))
             ys, xs = np.nonzero(bm)
-            face.blush(sh, (xs.mean() + M, ys.mean() + M), np.ptp(xs) / 2, np.ptp(ys) / 2 * 1.15, n=26, pressure=0.45,
-                       seed=20 + i, clip=full(nd.binary_dilation(bm, iterations=8) & ~P['white'] & ~hair_m))
+            face.blush(sh, (xs.mean() + M, ys.mean() + M), np.ptp(xs) / 2, np.ptp(ys) / 2 * 1.15, n=22, pressure=0.3,
+                       seed=20 + i, clip=full(nd.binary_dilation(bm, iterations=8) & ~big(P['white'], 150) & ~hair_m))
         if not strong:
             for sl, piece in comps(nd.binary_opening(P['blush'] & cz, iterations=3), 1500):
                 ys, xs = np.nonzero(whole(sl, piece))
@@ -187,19 +192,28 @@ with sh.clip(PANEL):
             cl, _ = nd.label(nd.binary_opening(coloured, iterations=1) | core)
             body = np.isin(cl, np.unique(cl[core])[np.unique(cl[core]) > 0])
             hl = hull(body)
-            if np.ptp(np.nonzero(hl)[0]) < 34:
+            half = np.ptp(np.nonzero(hl)[0]) < 34
+            if half:
                 # a half-closed eye: a catch-light under the lid can cut the iris in two; take in the coloured
                 # pieces just beyond it
                 hl = hull(body | nd.binary_opening(coloured & nd.binary_dilation(hl, iterations=6), iterations=1))
             lights = np.zeros_like(hl)
+            hl0 = hl.copy()
             for wsl, wpiece in comps(P['white'] & nd.binary_dilation(hl, iterations=2)):
                 wm = whole(wsl, wpiece)
                 grown = nd.binary_dilation(wm, iterations=2) & P['white']        # part of something bigger?
                 if wpiece.sum() < 600 and grown.sum() < wpiece.sum() + 30 and (wm & hl).sum() > 0.6 * wpiece.sum():
                     lights |= wm
                 elif wpiece.sum() < 250 and grown.sum() < wpiece.sum() + 30:
-                    lights |= wm                 # a catch-light on the iris's edge, under the lid: the iris
-                    hl = hull(body | wm)         # reaches round it
+                    # a catch-light on the iris's edge, under the lid: the whole bright spot, and the iris
+                    # reaches round it
+                    wm = nd.binary_dilation(wm, iterations=4, mask=(LUM > 200) & ~P['skin'] & ~P['shadow'])
+                    lights |= wm
+                    hl = hull(hl | nd.binary_dilation(wm, iterations=3))
+                elif (half and 40 < wpiece.sum() < 500 and wpiece.mean() > 0.6 and
+                      max(wpiece.shape) < 1.8 * min(wpiece.shape) and (wm & nd.binary_dilation(hl0, iterations=4)).any()):
+                    lights |= wm                 # the same on a half-closed eye: a round white spot, not a
+                    hl = hull(hl | wm)           # sliver of the eye's white
             im = nd.binary_opening(hl & ~P['skin'] & ~(P['white'] & ~lights), iterations=2)
             if im.sum() < 60:
                 continue
@@ -213,12 +227,18 @@ with sh.clip(PANEL):
             if small:
                 lv[im & P['amber'] & ~P['yellow']] = 0.18
             lv[im & P['yellow']] = 0.07
+            if small:
+                # the lid's shadow, as on the big eyes: the top third of the sliver a step darker
+                top = im & (np.arange(ref.PH)[:, None] < ys_i.min() + 0.36 * np.ptp(ys_i))
+                lv[top] = np.maximum(lv[top], 0.55)
             pup = nd.binary_opening(P['black'] & nd.binary_erosion(im, iterations=2 if small else 3), iterations=2)
             pc = comps(pup, 12)
             pup = whole(*max(pc, key=lambda c: c[1].sum())) if pc else np.zeros_like(im)
             if small:
                 # its black rim, traced, would fill the whole sliver: a hairline rim and three streaks instead
                 SMALL |= nd.binary_dilation(im, iterations=1) & ~pup
+                # and beside and below it, the scraps of its rim left outside the hull
+                SMALL |= nd.binary_dilation(im, iterations=4) & (np.arange(ref.PH)[:, None] > ys_i.min() + 3)
             face.iris(sh, full(im), full(lv), pupil=full(pup), lights=full(lights), seed=60 + i,
                       rim=0.3 if small else 0.6, streaks=3 if small else 7)
             LIGHTS |= lights
@@ -234,12 +254,38 @@ with sh.clip(PANEL):
         if not gl.any():
             face.eye_white(sh, full(P['white'] & ez & ~IRIS), full(DARK & ez), depth=4, level=0.2)
         # 6. mouth: black inside, toned tongue or lips, paper teeth
-        tongue = nd.binary_opening(P['pink'] & mz, iterations=1) if not strong else np.zeros_like(mz)
+        pinkm = nd.binary_opening(P['pink'] & mz, iterations=1) if not strong else np.zeros_like(mz)
         inside = nd.binary_closing(DARK & mz, iterations=2)
         inside = np.any([whole(*c) for c in comps(inside, 900)] or [np.zeros_like(inside)], axis=0)
-        teeth = P['white'] & mz & nd.binary_fill_holes(nd.binary_closing(inside | tongue | P['white'] & mz &
-                                                       nd.binary_dilation(inside, iterations=8), iterations=4))
-        face.open_mouth(sh, full(inside & ~tongue & ~teeth), tongue=full(tongue), teeth=full(teeth), seed=80 + i)
+        # the opening is everything the dark inside and the pink enclose. What is left of it above the dark is
+        # teeth, the rest is tongue: the pink is its darker middle, and its paler rim goes with it.
+        opening = nd.binary_fill_holes(nd.binary_closing(inside | pinkm, iterations=4))
+        if inside.any():
+            # the white of the teeth reaches up to the lip line: take it in, then close
+            # and a laughing mouth is one convex shape from corner to corner: its hull, so the grey corner teeth
+            # and the lip line over them belong to it
+            opening = hull(nd.binary_fill_holes(nd.binary_closing(
+                opening | P['white'] & mz & nd.binary_dilation(inside, iterations=8), iterations=4)))
+        tongue = np.zeros_like(mz); teeth = tongue.copy()
+        if inside.any():
+            cy_in = np.nonzero(inside)[0].mean()
+            for sl, piece in comps(nd.binary_opening(opening & ~inside, iterations=1), 40):
+                pm = whole(sl, piece)
+                if np.nonzero(pm)[0].mean() < cy_in and (pm & P['white']).sum() > 0.3 * pm.sum():
+                    teeth |= pm
+                else:
+                    tongue |= pm
+        else:
+            tongue = opening
+        if teeth.any():
+            # the corner teeth are grey in the reference and fall out of the white: whatever of the opening is
+            # still unclaimed above the dark inside is teeth in shadow
+            rest = opening & ~inside & ~tongue & ~teeth
+            teeth |= rest & (np.arange(ref.PH)[:, None] < cy_in)
+        shade = nd.binary_opening(teeth & (LUM < 228), iterations=1)       # the teeth in the mouth's corners
+        face.open_mouth(sh, full(inside & ~tongue & ~teeth), tongue=full(tongue), teeth=full(teeth), seed=80 + i,
+                        tongue_level=0.2, tongue_core=full(pinkm & tongue), core_level=0.34,
+                        teeth_shade=full(shade), shade_level=0.24)
         MOUTH |= inside | tongue | teeth
 
     # 8. solid blacks and drawn black lines (lash bands, pupils, outlines): thick parts filled, thin stroked
@@ -249,7 +295,7 @@ with sh.clip(PANEL):
     for i in range(8):
         INNER |= cellmask(i, 0.22, 0.66, 0.24, 0.76)
     hair_edge = nd.binary_dilation(hair_t, iterations=4) & ~INNER
-    open_m = nd.binary_dilation(MOUTH, iterations=4)
+    open_m = nd.binary_dilation(MOUTH, iterations=7)       # the opening's own line is drawn with the mouth
     lash = nd.binary_closing(DARK & EYEZ, iterations=2) & ~IRIS & ~P['white'] & ~P['skin']   # flecks in the bands
     ll, ln = nd.label(lash)
     lsz = nd.sum(lash, ll, np.arange(1, ln + 1))
@@ -293,9 +339,21 @@ with sh.clip(PANEL):
     #    G-pen. The shirt's outline is one quiet line.
     free = ~nd.binary_dilation(DARK, iterations=2) & ~hair_m & ~brows & ~nd.binary_dilation(IRIS, iterations=2) & ~hair_edge
     thin = P['line'] & free
-    brow_l = nd.binary_closing(thin & BROWZ, iterations=2)             # the thin brows of the easy faces
+    soft = P['line_soft'] & ~nd.binary_dilation(nd.binary_opening(P['line_soft'], iterations=2), iterations=3)
+    # soft lines only where thin and long (a faint brow arc), never the outline of a shadow patch
+    soft_l = np.zeros_like(soft)
+    for sl, piece in comps(nd.binary_closing(soft & free & BROWZ, iterations=2), 30):
+        long_side = max(piece.shape)
+        if long_side >= 28 and long_side > 5 * piece.sum() / long_side:
+            soft_l |= whole(sl, piece)
+    brow_l = nd.binary_closing(P['line'] & free & BROWZ, iterations=2)
+    nb0, _ = trace.ink_line_art(sh, full(nd.binary_dilation(soft_l, iterations=1)), pens=('maru', 'maru'), min_len_px=14,
+                                beta_px=99, weight=0.55, min_px=1.0, even=0.9, seed=16)             # the thin brows of the easy faces
     nb, _ = trace.ink_line_art(sh, full(brow_l), pens=('maru', 'g_pen'), split_mm=0.12, min_len_px=14, beta_px=99,
                                weight=0.9, min_px=1.7, even=0.8, seed=13)
+    # the smug face's right brow fades to a faint tail in the reference, too faint to detect: by hand (ref px)
+    sh.stroke([(M + x * ref.S, M + y * ref.S) for x, y in [(768.5, 709.2), (778, 710.5), (788, 714.5), (797, 720), (805.5, 726.5)]],
+              pen='maru', pressure=0.65, taper=(0.3, 1.0), seed=15)
     thin &= ~BROWZ
     n2, _ = trace.ink_line_art(sh, full(thin & ~SHIRT & ~MOUTHZ), pens=('maru', 'saji'), split_mm=0.2, min_len_px=5,
                                beta_px=99, weight=0.8, min_px=1.2, even=0.8, seed=8)
@@ -304,7 +362,7 @@ with sh.clip(PANEL):
                                 weight=0.85, min_px=1.7, even=0.7, seed=12)
     n2b, _ = trace.ink_line_art(sh, full(nd.binary_closing(thin & SHIRT, iterations=2)), pens=('saji', 'saji'),
                                 split_mm=0.2, min_len_px=30, beta_px=99, weight=0.8, min_px=1.6, even=0.9, seed=11)
-    n2 += n2m + nb
+    n2 += n2m + nb + nb0
     # 10. hair: strand lines in the tone, and the outline
     strands = nd.binary_opening(P['strand'] & nd.binary_erosion(hair_m, iterations=3), iterations=1)
     n3, _ = trace.ink_line_art(sh, full(strands), pens=('maru', 'maru'), min_len_px=28, beta_px=99, weight=0.6,

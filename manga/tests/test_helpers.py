@@ -205,6 +205,32 @@ def test_face_open_mouth_black_inside_toned_tongue_paper_teeth():
     assert sh.ink[124:131, 120:180].mean() < 0.05
 
 
+def test_face_open_mouth_shaded_teeth_and_tongue_core():
+    from manga import face
+    sh = Sheet(300, 300, px_per_mm=8)
+    inside = np.zeros((300, 300), bool); inside[120:200, 80:220] = True
+    tongue = _disc((300, 300), (150, 190), 30) & inside
+    core = _disc((300, 300), (150, 192), 16) & tongue
+    teeth = np.zeros((300, 300), bool); teeth[120:135, 100:200] = True
+    shade = teeth.copy(); shade[:, 125:] = False
+    face.open_mouth(sh, inside & ~tongue & ~teeth, tongue=tongue, teeth=teeth, tongue_level=0.15, tongue_core=core,
+                    core_level=0.45, teeth_shade=shade, shade_level=0.3)
+    assert sh.ink[124:131, 104:122].mean() > 0.1          # the corner of the teeth is toned
+    assert sh.ink[124:131, 140:190].mean() < 0.05         # the rest stays paper
+    assert sh.ink[184:198, 142:158].mean() > sh.ink[168:176, 128:136].mean()   # core darker than rim
+
+
+def test_face_blush_tone_fades_to_its_edge():
+    from manga import face
+    sh = Sheet(500, 240, px_per_mm=8)
+    m = np.zeros((240, 500), bool); m[80:160, 60:440] = True
+    face.blush_tone(sh, m, peak=0.3, soft_px=26)
+    rows = [sh.ink[y:y + 10, 100:400].mean() for y in (82, 95, 115)]
+    assert rows[0] < rows[1] < rows[2]                    # darker toward the middle
+    assert abs(sh.ink[82:92, 100:400].mean() - sh.ink[148:158, 100:400].mean()) < 0.05
+    assert sh.ink[:70].sum() < 1
+
+
 def test_face_blush_gloom_and_sweat():
     from manga import face
     sh = Sheet(400, 300, px_per_mm=8)
