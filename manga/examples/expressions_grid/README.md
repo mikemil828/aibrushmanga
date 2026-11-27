@@ -37,8 +37,12 @@ Fourth round:
 - The lid's shadow on the eye white comes from the lash band only, so no tone shows below an iris's rim.
 - Dark pieces by the ears count as a lash band only next to an eye white; the hair shadow over the ear tops is
   drawn as hairlines, not solid blobs.
+- Each iris is filled out to the reference's own dark rim and nothing past it (where the rim closes into a round
+  shape), and an "iris" with no amber and no eye white beside it (hair by an ear, a brow's shadow) is dropped. A
+  small round iris (the worried face) is drawn as a whole iris with a firm rim, not as a half-closed one.
 
 Remaining:
+- Where the reference's iris has no dark rim at the bottom (the angry face's right eye) the iris ends flat.
 - The collar folds follow the reference's light, so they read as soft shading rather than drawn creases.
 - A brow head is drawn a little thinner than the reference's widest part on some faces (neutral, worried).
 - A few faces carry a thin tail line past the brow where the reference has a faint forehead crease.

@@ -298,7 +298,9 @@ with sh.clip(PANEL):
             ids = np.unique(cl[reach]); body = np.isin(cl, ids[ids > 0])
             body &= nd.binary_dilation(core, iterations=int(0.06 * (ref.cell(i)[3] - ref.cell(i)[1])))
             hl = hull(body)
-            half = np.ptp(np.nonzero(hl)[0]) < 0.065 * (ref.cell(i)[3] - ref.cell(i)[1])
+            # half-closed: short and wide under a low lid. A small round iris (the worried face's) is a whole one
+            half = np.ptp(np.nonzero(hl)[0]) < 0.065 * (ref.cell(i)[3] - ref.cell(i)[1]) \
+                and np.ptp(np.nonzero(hl)[1]) > 1.25 * np.ptp(np.nonzero(hl)[0])
             lights = np.zeros_like(hl)
             for wsl, wpiece in comps(P['white'] & nd.binary_dilation(hl, iterations=2)):
                 wm = whole(wsl, wpiece)
@@ -308,6 +310,17 @@ with sh.clip(PANEL):
             # the pale yellow low in the iris passes for skin: only skin at the hull's edge is cut away
             im = nd.binary_opening(hl & ~(P['white'] & ~lights) & ~(P['skin'] & ~nd.binary_erosion(hl, iterations=4)),
                                    iterations=2)
+            # the reference's own dark rim bounds the iris: fill out to it (the pale crescent low in the iris passes
+            # for white and skin, so the hull stops short of the rim) and cut away anything beyond it
+            rim_n = nd.binary_closing(DARK & nd.binary_dilation(im, iterations=6), iterations=1)
+            filled = nd.binary_fill_holes(rim_n | nd.binary_erosion(im, iterations=3))
+            enclosed = nd.binary_erosion(filled, iterations=2)          # the rim's own ink stays the traced line's
+            # only where the rim closes into a round shape (a half-closed iris is cut by the lid: left as it is)
+            if not half and 0.8 * im.sum() < enclosed.sum() < 1.6 * im.sum() \
+                    and enclosed.sum() > 0.91 * hull(enclosed).sum():
+                im = enclosed & nd.binary_dilation(im, iterations=6)
+            if core.sum() < 40 or (nd.binary_dilation(im, iterations=6) & P['white']).sum() < 30:
+                continue                                 # no amber, no white beside it: hair or a brow, not an eye
             if im.sum() < 60 or (nd.binary_dilation(im, iterations=6) & P['black']).sum() < 40 \
                     or (im & P['blush']).sum() > 0.2 * im.sum():
                 continue                                 # an iris sits against a lash band, not in a blush
