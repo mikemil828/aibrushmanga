@@ -113,6 +113,8 @@ Learned on the expressions panel, over four review rounds:
   the recommended way to work: start from a reference image.
 - `examples/expressions/`: eight expressions of one face as a single panel, drawn from a reference sheet. It shows
   how brows, eyes, mouths, blush, gloom and sweat are drawn with `manga.face` (see its README).
+- `examples/expressions_grid/`: nine expressions of a boy in a 3 x 3 grid with a dark collar; irises layered by
+  position, gritted teeth, a blush band (see its README).
 - `examples/rice_field/`: a single landscape panel (paddies, village, mountains, a walker) drawn from a reference
   image. It shows line tone for water, dot tone for land, and hand-drawn seedlings and figure (see its README).
 
