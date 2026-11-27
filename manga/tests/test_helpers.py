@@ -148,3 +148,74 @@ def test_face_closed_eye_and_smile_ink_where_asked():
     assert line[len(line) // 2][1] > 105         # the lid bows downward
     face.closed_smile(sh, [(120, 200), (150, 212), (180, 202)], to_page=lambda x, y: (x, y))
     assert sh.ink[195:230, 110:190].sum() > 30
+
+
+def _disc(shape, c, r):
+    yy, xx = np.mgrid[:shape[0], :shape[1]]
+    return (xx - c[0]) ** 2 + (yy - c[1]) ** 2 < r * r
+
+
+def test_face_brow_is_solid_tapered_and_measurable():
+    from manga import face
+    sh = Sheet(400, 200, px_per_mm=8)
+    pts = [(100, 100), (150, 90), (200, 88), (250, 95), (300, 110)]
+    face.brow(sh, pts, [6, 12, 14, 10, 4])
+    assert sh.ink[83:93, 195:205].mean() > 0.9             # solid in the middle
+    assert sh.ink[:, 100:104].sum() < sh.ink[:, 198:202].sum() * 0.4   # pointed at the end
+    got, wd = face.ribbon_of(sh.ink > 0.5, step=10)
+    assert len(got) > 10 and 9 < wd.max() < 18              # the measured ribbon matches what was drawn
+    assert abs(got[:, 0].min() - 100) < 12 and abs(got[:, 0].max() - 300) < 12
+
+
+def test_face_iris_layers_pupil_and_lights():
+    from manga import face
+    sh = Sheet(300, 300, px_per_mm=8)
+    m = _disc((300, 300), (150, 150), 60)
+    yy = np.mgrid[:300, :300][0]
+    lv = np.where(yy < 130, 0.86, 0.3).astype(np.float32) * m
+    pupil = _disc((300, 300), (150, 150), 14)
+    light = _disc((300, 300), (125, 120), 9)
+    face.iris(sh, m, lv, pupil=pupil, lights=light, seed=1)
+    assert sh.ink[100:115, 150:175].mean() > 0.95           # the layer under the lid is solid black
+    assert 0.15 < sh.ink[175:195, 110:135].mean() < 0.6     # the lower layer is tone
+    assert sh.ink[146:154, 146:154].mean() > 0.95           # pupil
+    assert sh.ink[117:123, 122:128].mean() < 0.05           # the catch-light is paper, over everything
+    assert sh.ink[:, :80].sum() < 1                         # nothing outside the eye
+
+
+def test_face_eye_white_shadow_sits_under_the_lash():
+    from manga import face
+    sh = Sheet(200, 200, px_per_mm=8)
+    white = np.zeros((200, 200), bool); white[80:140, 40:160] = True
+    lash = np.zeros((200, 200), bool); lash[70:80, 40:160] = True
+    s = face.eye_white(sh, white, lash, depth=6)
+    assert s[80:86].any() and not s[90:].any()
+    assert sh.ink[100:140].sum() < 1
+
+
+def test_face_open_mouth_black_inside_toned_tongue_paper_teeth():
+    from manga import face
+    sh = Sheet(300, 300, px_per_mm=8)
+    inside = np.zeros((300, 300), bool); inside[120:200, 80:220] = True
+    tongue = _disc((300, 300), (150, 190), 30) & inside
+    teeth = np.zeros((300, 300), bool); teeth[120:135, 100:200] = True
+    face.open_mouth(sh, inside & ~tongue & ~teeth, tongue=tongue, teeth=teeth)
+    assert sh.ink[145:155, 90:110].mean() > 0.95
+    assert 0.1 < sh.ink[180:195, 140:160].mean() < 0.6
+    assert sh.ink[124:131, 120:180].mean() < 0.05
+
+
+def test_face_blush_gloom_and_sweat():
+    from manga import face
+    sh = Sheet(400, 300, px_per_mm=8)
+    face.blush(sh, (100, 150), 50, 25, n=7, seed=1)
+    box = sh.ink[115:185, 40:160]
+    assert box.sum() > 50 and sh.ink[:, 200:].sum() < 1
+    m = np.zeros((300, 400), bool); m[40:120, 220:380] = True
+    before = sh.ink.copy()
+    face.gloom(sh, m, seed=2)
+    assert sh.ink[45:70, 230:370].mean() > sh.ink[95:118, 230:370].mean() > 0.02   # heavier at the top
+    assert np.allclose(sh.ink[~m], before[~m])
+    face.sweat(sh, (300, 220), 30)
+    assert sh.ink[200:245, 285:315].sum() > 10               # an outline
+    assert sh.ink[222:228, 302:308].mean() < 0.2             # paper inside

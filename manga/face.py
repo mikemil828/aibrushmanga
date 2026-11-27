@@ -1,14 +1,27 @@
-"""Expression parts drawn by hand, for changing a face from the reference (closed eyes, a closed smile).
+"""The parts an expression is made of, each drawn the way an inker draws it.
 
-Points are in the reference's own pixels; `to_page(x, y)` maps them to the page (a Frame's P works). Erase what
-they replace first (paint the eye or mouth area over with the skin's own tone), then draw these on top.
+A face reads through a small vocabulary: the brows (their slant, weight and the knit between them), the eye (how
+far the lids open, how much white shows round the iris, where the pupil sits, the catch-lights), the mouth (a
+line, an open shape with teeth and tongue), and the marks laid over them (a blush, a sweat drop, the gloom band
+of fright). Each has a function here. Shapes come as page-px masks or points, read off a reference or placed by
+hand, so an expression is data that can be changed.
 
-    face.closed_eye(sh, inner=(538, 387), outer=(615, 395), to_page=fr.P, sag=10)
-    face.closed_smile(sh, [(455, 459), (480, 470), (518, 462)], to_page=fr.P)
+    face.brow(sh, pts, widths)                          # a tapered brow through points
+    face.iris(sh, iris_mask, levels, pupil=m, lights=m) # cel-shaded iris, rim, streaks, pupil, catch-lights
+    face.eye_white(sh, white_mask, lash_mask)           # the lid's cast shadow on the white
+    face.open_mouth(sh, inside, tongue=m)               # black inside, toned tongue, clean teeth
+    face.blush(sh, (cx, cy), rx, ry, n=7)               # slanted hatch on a cheek
+    face.gloom(sh, mask)                                # vertical line tone and falling lines: dread
+    face.sweat(sh, (x, y), size)                        # a drop with its highlight
+    face.closed_eye(sh, inner, outer, to_page=fr.P)     # a content closed eye (ref px + to_page)
+    face.closed_smile(sh, pts, to_page=fr.P)
 """
 import numpy as np
+from PIL import Image, ImageDraw
+from scipy import ndimage as nd
 
 from . import geom
+from .tone import tone
 
 
 def _frame(inner, outer):
@@ -71,3 +84,204 @@ def closed_smile(sh, pts, to_page, tucks=4.0, lower_lip=True):
         w = 0.13 * float(np.hypot(*(b - a)))
         sh.stroke([to_page(mid[0] - w, mid[1] + 11), to_page(mid[0], mid[1] + 13), to_page(mid[0] + w, mid[1] + 12)],
                   pen='maru', pressure=0.3, taper=(1.0, 1.0))
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# parts drawn from page-px shapes
+
+
+def _smooth(mask, sigma):
+    return nd.gaussian_filter(np.asarray(mask, np.float32), sigma) > 0.5 if sigma else np.asarray(mask, bool)
+
+
+def ink_shape(sh, mask, sigma=1.0):
+    """A solid black shape (a lash band, a pupil, a thick brow) with its edge rounded at the page's scale."""
+    m = _smooth(mask, sigma)
+    if m.any():
+        sh.fill(m)
+    return m
+
+
+def ribbon_of(mask, step=4.0):
+    """Measure an elongated blob (a brow, a lid band) as a centre line with a width at each point.
+    Returns (pts (N, 2) page px, widths (N,) px), running along the blob's long axis."""
+    ys, xs = np.nonzero(mask)
+    if len(xs) < 6:
+        return np.zeros((0, 2)), np.zeros(0)
+    c = np.array([xs.mean(), ys.mean()])
+    d = np.column_stack([xs, ys]) - c
+    _, _, vt = np.linalg.svd(d, full_matrices=False)
+    ax = vt[0] if vt[0][0] >= 0 else -vt[0]
+    nrm = np.array([-ax[1], ax[0]])
+    u, v = d @ ax, d @ nrm
+    edges = np.arange(u.min(), u.max() + step, step)
+    pts, w = [], []
+    for a, b in zip(edges[:-1], edges[1:]):
+        sel = (u >= a) & (u < b)
+        if sel.sum() < 2:
+            continue
+        lo, hi = v[sel].min(), v[sel].max()
+        pts.append(c + ax * (a + b) / 2 + nrm * (lo + hi) / 2)
+        w.append(hi - lo + 1)
+    return np.array(pts), np.array(w, float)
+
+
+def brow(sh, pts, widths, smooth=1.5):
+    """A brow as an inker lays it: one filled, tapered shape through `pts` (page px) with `widths` (px) along
+    it, pointed at both ends. Change the points to change the expression: inner ends down for anger, up for
+    worry, the whole arc high for surprise."""
+    P = np.asarray(pts, float)
+    if len(P) < 2:
+        return
+    w = np.asarray(widths, float) * np.ones(len(P))
+    if len(P) > 8 and smooth:                       # dense measured points carry pixel noise; a few hand-placed ones don't
+        P = nd.gaussian_filter1d(P, smooth, axis=0, mode='nearest')
+        w = nd.gaussian_filter1d(w, smooth, mode='nearest')
+    Q = geom.catmull(P, per=6) if len(P) > 2 else P
+    wq = np.interp(np.linspace(0, 1, len(Q)), np.linspace(0, 1, len(w)), w)
+    u = np.linspace(0, 1, len(Q))
+    wq = wq * np.clip(np.minimum(u, 1 - u) / 0.08, 0.15, 1)               # pointed ends
+    n = geom.normals(Q)
+    poly = np.vstack([Q + n * wq[:, None] / 2, (Q - n * wq[:, None] / 2)[::-1]])
+    sh.fill([tuple(p) for p in poly])
+
+
+def eye_white(sh, white, lash, depth=7.0, level=0.26, lpi=70):
+    """The white of the eye stays paper; the upper lid casts a thin shadow on it. `white` is the white's mask,
+    `lash` the lash band above it, `depth` the shadow's height in px."""
+    d = int(round(depth))
+    sh_m = np.zeros_like(white)
+    acc = np.asarray(lash, bool).copy()
+    for _ in range(d):
+        acc = np.roll(acc, 1, axis=0); acc[0] = False
+        sh_m |= acc
+    sh_m &= white
+    if sh_m.any():
+        tone(sh, sh_m, level=level, lpi=lpi)
+    return sh_m
+
+
+def iris(sh, mask, levels, pupil=None, lights=None, rim=0.6, streaks=7, lpi=60, solid=0.8, seed=0):
+    """An iris in cel layers. `mask` is the visible iris, `levels` a tone level per pixel (dark under the lid,
+    lighter below, the bright crescent near the bottom). Layers at or above `solid` are inked black, as the
+    lid's shadow on a manga eye is; the rest is tone. Over them: fine streaks fanning down from the pupil, a
+    firm rim, the pupil in black, and the catch-lights scraped back to paper last of all."""
+    from . import prep
+    m = _smooth(mask, 0.8)
+    if not m.any():
+        return
+    rng = np.random.default_rng(seed)
+    levels = np.asarray(levels, np.float32)
+    dark = _smooth(m & (levels >= solid), 1.0) & m
+    lv = nd.gaussian_filter(np.where(m, np.where(levels >= solid, 0.5, levels), 0).astype(np.float32), 0.8)
+    sh.fill(m, mode='white')
+    tone(sh, m & ~dark, level=np.where(m, lv, 0).astype(np.float32), lpi=lpi)
+    if dark.any():
+        sh.fill(dark)
+    ys, xs = np.nonzero(m)
+    cx, cy = xs.mean(), ys.mean()
+    rx, ry = (np.ptp(xs) + 1) / 2, (np.ptp(ys) + 1) / 2
+    if pupil is not None and pupil.any():
+        py_, px_ = np.nonzero(pupil); cx, cy = px_.mean(), py_.mean()
+    if streaks and min(rx, ry) > 9:
+        with sh.clip(m):
+            for a in np.linspace(0.12 * np.pi, 0.88 * np.pi, streaks) + rng.normal(0, 0.05, streaks):
+                r0, r1 = 0.45 * min(rx, ry), 1.1 * max(rx, ry)
+                sh.stroke([(cx + r0 * np.cos(a), cy + r0 * np.sin(a)), (cx + r1 * np.cos(a), cy + r1 * np.sin(a))],
+                          pen='maru', pressure=0.25, taper=(0.3, 0.6), smooth=False, seed=int(rng.integers(1 << 30)))
+    if rim:
+        prep.ink_outline(sh, m, pen='g_pen', pressure=(rim * 0.8, rim), sigma=1.0, min_len=6, seed=seed)
+    if pupil is not None and pupil.any():
+        sh.fill(_smooth(pupil, 0.8))
+    if lights is not None and lights.any():
+        L = _smooth(lights, 0.7)
+        sh.fill(L, mode='white')
+
+
+def open_mouth(sh, inside, tongue=None, teeth=None, tongue_level=0.3, lpi=60, outline=True, seed=0):
+    """An open mouth: the inside in solid black, the tongue a light tone with its own outline, the teeth left
+    as clean paper. All masks are page px."""
+    from . import prep
+    m = _smooth(inside, 1.0)
+    if m.any():
+        sh.fill(m)
+    if tongue is not None and tongue.any():
+        tg = _smooth(tongue, 1.0)
+        sh.fill(tg, mode='white')
+        tone(sh, tg, level=tongue_level, lpi=lpi)
+        prep.ink_outline(sh, tg, pen='maru', pressure=(0.5, 0.8), sigma=1.0, min_len=8, seed=seed)
+    whole = m.copy()
+    if tongue is not None:
+        whole |= _smooth(tongue, 1.0)
+    if teeth is not None and teeth.any():
+        tt = _smooth(teeth, 0.8)
+        sh.fill(tt, mode='white')
+        whole |= tt
+    if outline and whole.any():
+        # the lips: one line round the whole opening, so the teeth are held in
+        whole = nd.binary_fill_holes(nd.binary_closing(whole, iterations=2))
+        prep.ink_outline(sh, whole, pen='g_pen', pressure=(0.45, 0.7), sigma=1.2, min_len=10, seed=seed + 1)
+
+
+def blush(sh, center, rx, ry, n=7, slant=-62.0, pen='maru', pressure=0.32, length=0.75, seed=0, clip=None):
+    """A blush as manga draws it: `n` short slanted strokes across the cheek inside an ellipse (page px), longest
+    in the middle. More strokes, closer together, for a deeper flush; `slant` is their angle in degrees."""
+    rng = np.random.default_rng(seed)
+    cx, cy = center
+    a = np.deg2rad(slant)
+    dx, dy = np.cos(a), np.sin(a)
+
+    def run():
+        for i in range(n):
+            f = (i + 0.5) / n * 2 - 1                                   # -1 .. 1 across the cheek
+            x = cx + f * rx * 0.92 + rng.normal(0, rx * 0.02)
+            L = ry * length * np.sqrt(max(1 - f * f, 0.08)) * rng.uniform(0.8, 1.1)
+            y = cy + rng.normal(0, ry * 0.06)
+            sh.stroke([(x - dx * L, y - dy * L), (x + dx * L, y + dy * L)], pen=pen, pressure=pressure,
+                      taper=(0.5, 0.7), smooth=False, seed=int(rng.integers(1 << 30)))
+    if clip is not None:
+        with sh.clip(clip):
+            run()
+    else:
+        run()
+
+
+def gloom(sh, mask, level=(0.42, 0.14), lpi=34, lines=18, seed=0):
+    """The shadow that falls over a frightened face: vertical line tone, heaviest at the top and thinning
+    downward, with a few drawn lines falling from its upper edge. `mask` is page px."""
+    m = np.asarray(mask, bool)
+    if not m.any():
+        return
+    rng = np.random.default_rng(seed)
+    ys, xs = np.nonzero(m)
+    y0, y1 = ys.min(), ys.max()
+    yy = np.arange(m.shape[0], dtype=np.float32)[:, None]
+    lv = level[0] + (level[1] - level[0]) * np.clip((yy - y0) / max(y1 - y0, 1), 0, 1)
+    tone(sh, m, level=np.where(m, lv, 0).astype(np.float32), lpi=lpi, kind='line', angle=0)
+    with sh.clip(m):
+        for x in np.linspace(xs.min(), xs.max(), lines) + rng.normal(0, 3, lines):
+            col = m[:, int(np.clip(x, 0, m.shape[1] - 1))]
+            if not col.any():
+                continue
+            top = int(np.argmax(col))
+            L = (y1 - y0) * rng.uniform(0.25, 0.7)
+            sh.stroke([(x, top), (x, top + L)], pen='maru', pressure=0.45, taper=(0.0, 1.5), smooth=False,
+                      seed=int(rng.integers(1 << 30)))
+
+
+def sweat(sh, at, size, tilt=0.0):
+    """A sweat drop at `at` (its centre, page px), `size` px tall: pointed above, round below, paper inside,
+    with a small curved highlight line. `tilt` in degrees leans it."""
+    cx, cy = at
+    h, w = size, size * 0.62
+    t = np.linspace(0, 2 * np.pi, 40)
+    x = w / 2 * np.sin(t) * (1 - 0.55 * (np.cos(t) + 1) / 2) ** 1.0
+    y = -h / 2 * np.cos(t) * np.where(np.cos(t) > 0, 1.25, 0.85) + h * 0.1
+    a = np.deg2rad(tilt)
+    X = cx + x * np.cos(a) - y * np.sin(a)
+    Y = cy + x * np.sin(a) + y * np.cos(a)
+    pts = list(zip(X, Y))
+    sh.fill(pts, mode='white')
+    sh.stroke(np.column_stack([X, Y, np.full(len(X), 0.55)]), pen='maru', taper=(0, 0))
+    hl = [(cx - w * 0.18, cy + h * 0.05), (cx - w * 0.2, cy + h * 0.22), (cx - w * 0.05, cy + h * 0.33)]
+    sh.stroke(hl, pen='maru', pressure=0.3, taper=(0.4, 0.6))
