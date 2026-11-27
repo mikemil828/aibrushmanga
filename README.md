@@ -32,7 +32,7 @@ The first thing you'll want to build is an automaton: "compare the canvas to the
 
 License: AGPL-3.0 (see LICENSE). Paintings you make with aibrush are yours.
 
-The manga mode (`manga/`) is an addition to the original work by this fork and is under the same AGPL-3.0, with two
+The manga mode (`manga/`) is an addition to the original work by this fork and is under the same AGPL-3.0, with these
 exceptions:
 
 - `manga/fonts/` holds the Comic Neue font, under the SIL Open Font License 1.1 (`manga/fonts/OFL-ComicNeue.txt`).
@@ -41,6 +41,8 @@ exceptions:
   `manga/examples/pool_page/REF-LICENSE.txt`).
 - `manga/examples/rice_field/ref.png` was supplied by the fork's owner, all rights reserved, on the same terms
   (see `manga/examples/rice_field/REF-LICENSE.txt`).
+- `manga/examples/expressions/ref.png` and `manga/examples/expressions_grid/ref.png` were supplied by the fork's
+  owner, all rights reserved, on the same terms (see the `REF-LICENSE.txt` beside each).
 
 ## Support
 
