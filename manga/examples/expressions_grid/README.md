@@ -21,13 +21,18 @@ in `manga.tools`.
   reference's iris is a gradient whose middle tones fall between the colour classes.
 - Gritted teeth: the opening is the white itself, with the reference's own tooth lines.
 - The pupil is the black piece nearest the iris's middle, not the lash band lying across its top.
+- Every iris colour piece within reach of the amber belongs to the iris (the pupil can split them).
+- The eye white's rim: only its lower half is drawn, as a light lid line; pupils inside the white stay solid.
+- The collar is one shape (its navy plus the near-black inside) with a tone graded by the reference's light.
+- Near-black hair shadow behind the ears is hair (by darkness); blacks round the ears are hairlines.
 
 ## Weak spots
 
-- The neck shadow is speckled where the reference uses two close skin tones.
-- The ears are busy: their inner lines and shadow come out as small dark marks.
-- The collar is one dark tone; the reference's folds and the light along its rim are mostly lost.
-- The embarrassed face's left iris is darker and blotchier than the right.
-- The angry face's lower lid lines run a little long at the outer corners.
+Second round (the first list is fixed: neck shadow, ear marks, flat collar, blotchy iris, long lid lines):
+
+- The ears still carry a few small dark marks where the hair's shadow meets the ear's own lines.
+- The collar's folds come from the reference's light and read softly; the inside of the collar is no longer
+  solid black.
+- The angry face's lids keep a thin line past the outer corners, as the reference has, but a little heavier.
 
 `ref.png` is not covered by the code's license: see `REF-LICENSE.txt`.

@@ -46,7 +46,7 @@ def read(path='ref.png'):
     P['amber'] = (r > 175) & (r - b > 95) & (g > 130)
     P['pink'] = (r > 190) & (r - g > 55) & (g < 165) & ~P['amber']             # mouth inside, tongue
     P['skin'] = (r > 232) & (r - b > 40) & (g > 196)
-    P['shadow'] = (r > 190) & (r - b > 45) & (g > 140) & (g <= 196) & ~P['amber'] & ~P['pink']
+    P['shadow'] = (r > 172) & (r - b > 45) & (g > 118) & (g <= 196) & ~P['amber'] & ~P['pink']   # incl. the neck's deep shade
     P['blush'] = (r > 228) & (r - g > 52) & (b > 138) & (g < 200) & ~P['pink']   # cheeks: a flush or a band
     P['white'] = (mn > 205) & (b - r < 5) & ~P['bg'] & ~P['skin']              # eye whites, teeth, catch-lights
     k = int(round(5 * S))

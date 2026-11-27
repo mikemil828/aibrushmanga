@@ -122,10 +122,15 @@ brows = brows | (P['black'] & nd.binary_dilation(brows, iterations=2))
 # the hair's deepest shadow (under the locks, by the ears) is near black: outside the face it is still hair
 under = nd.binary_dilation(P['hair'] & ~brows, iterations=6, mask=P['black'] & ~INNER
                            & ~nd.binary_dilation(P['skin'] | P['shadow'], iterations=3))   # not the ears' lines
+# behind the ears the hair is in deep shadow, near black, and reaches the skin: by darkness, not by colour
+under |= nd.binary_dilation(P['hair'] & ~brows, iterations=10, mask=(LUM < 42) & ~INNER & ~LOW) & (LUM < 42) & ~INNER
 mass = big((P['hair'] | under) & ~brows, 500)      # small pieces too: the locks hanging by the jaw
 hair_m = nd.gaussian_filter(nd.binary_closing(mass, iterations=1).astype(np.float32), 0.9) > 0.5
 hair_t = nd.binary_dilation(hair_m, iterations=2)
-jacket = nd.gaussian_filter(nd.binary_closing(P['jacket'] & LOW, iterations=2).astype(np.float32), 1.0) > 0.5
+# the collar: its navy plus the near-black inside of the collar behind the neck, as one shape
+jk = P['jacket'] & LOW
+jk |= nd.binary_dilation(jk, iterations=30, mask=(P['black'] | P['jacket']) & LOW)
+jacket = nd.gaussian_filter(nd.binary_fill_holes(nd.binary_closing(jk, iterations=3)).astype(np.float32), 1.0) > 0.5
 DARK = P['black'] | P['brown']
 IRIS = np.zeros_like(mass); BAND = IRIS.copy(); LIGHTS = IRIS.copy(); MOUTH = IRIS.copy(); SMALL = IRIS.copy(); TEETH = IRIS.copy()
 
@@ -143,8 +148,11 @@ with sh.clip(PANEL):
     shine = nd.binary_opening(P['shine'] & hair_m, iterations=1)
     tone(sh, full(hair_t & ~shine), level=0.62, lpi=LPI)
     tone(sh, full(shine), level=0.30, lpi=LPI)
-    tone(sh, full(jacket), level=0.74, lpi=LPI)
-    deep = nd.binary_opening(jacket & (LUM < 36), iterations=2)
+    # the collar's folds: a tone graded by the reference's own light (its rim and fold tops are lighter navy)
+    jl = nd.gaussian_filter(LUM, 2.0)
+    jlv = np.clip(0.80 - (jl - 42) * 0.012, 0.50, 0.80).astype(np.float32)
+    tone(sh, full(jacket), level=full(np.where(jacket, jlv, 0).astype(np.float32)), lpi=LPI)
+    deep = nd.binary_opening(jacket & (jl < 34), iterations=3)
     sh.fill(full(nd.gaussian_filter(deep.astype(np.float32), 1.0) > 0.5))
 
     for i in range(N):
@@ -179,8 +187,11 @@ with sh.clip(PANEL):
         coloured = (P['amber'] | P['brown'] | P['shadow']) & ez & ~nd.binary_dilation(P['skin'], iterations=1)
         for sl, piece in comps(nd.binary_dilation(amber, iterations=6), 60):
             core = amber & nd.binary_dilation(whole(sl, piece), iterations=2)
+            # the pupil can split the iris's colours in two: take every coloured piece within reach of the amber
             cl, _ = nd.label(nd.binary_opening(coloured, iterations=1) | core)
-            ids = np.unique(cl[core]); body = np.isin(cl, ids[ids > 0])
+            reach = nd.binary_dilation(core, iterations=5)
+            ids = np.unique(cl[reach]); body = np.isin(cl, ids[ids > 0])
+            body &= nd.binary_dilation(core, iterations=int(0.06 * (ref.cell(i)[3] - ref.cell(i)[1])))
             hl = hull(body)
             half = np.ptp(np.nonzero(hl)[0]) < 0.065 * (ref.cell(i)[3] - ref.cell(i)[1])
             lights = np.zeros_like(hl)
@@ -265,9 +276,17 @@ with sh.clip(PANEL):
     blk = (P['black'] | P['brown'] & ~IRIS & EYEZ | lash) & ~nd.binary_dilation(brows, iterations=1)
     blk &= ~(MOUTHZ & ~open_m) & ~hair_edge & ~SMALL & ~open_m & ~jacket & ~nd.binary_erosion(IRIS, iterations=2)   # face.iris owns it
     tips = blk & nd.binary_dilation(hair_t, iterations=5) & ~lash_big
-    blk &= ~tips
+    # round the ears (outside the face) every black is a drawn line: hairlines, never filled blobs
+    tips |= blk & ~INNER & ~LOW & ~lash_big
+    # the dark rim round an eye white, away from the lash band, is a lid line: a hairline, not a heavy ink
+    whites_b = big(P['white'] & EYEZ & ~LIGHTS, 200)
+    lidb = blk & nd.binary_dilation(whites_b, iterations=4) & EYEZ & ~lash_big & ~nd.binary_dilation(IRIS, iterations=2) \
+        & ~nd.binary_erosion(nd.binary_fill_holes(nd.binary_dilation(whites_b, iterations=2)), iterations=3)   # a pupil inside the white stays solid
+    blk &= ~tips & ~lidb
     n1, _ = trace.ink_line_art(sh, full(blk), pens=('maru', 'g_pen'), split_mm=0.22, min_len_px=6, beta_px=3.0,
                                weight=1.0, min_px=1.0, even=0.6, seed=7)
+    nlb, _ = trace.ink_line_art(sh, full(lidb), pens=('maru', 'maru'), min_len_px=6, beta_px=99, weight=0.8,
+                                min_px=1.2, even=0.85, seed=19)
     nt, _ = trace.ink_line_art(sh, full(tips), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.45,
                                min_px=1.0, even=0.95, seed=14)
     # 6b. brows over the lashes: each the reference's own wedge with a paper ring
@@ -286,9 +305,25 @@ with sh.clip(PANEL):
     free = ~nd.binary_dilation(DARK, iterations=2) & ~hair_m & ~brows & ~nd.binary_dilation(IRIS, iterations=2) \
         & ~hair_edge & ~jacket & ~P['bg']
     thin = P['line'] & free & ~open_m & ~(BAND & ~P['black'])      # the band's edge is not a line
+    # the eye white's own grey rim: only its lower half is a lid, drawn as a light hairline; the rest of the rim
+    # (round the corners, past the lash band) is left out, or every eye gets a ring
+    whites = big(P['white'] & EYEZ & ~LIGHTS, 200)
+    rim = thin & nd.binary_dilation(whites, iterations=4) & EYEZ
+    lower = np.zeros_like(rim)
+    for sl, piece in comps(whites, 200):
+        ys_w = np.nonzero(piece)[0] + sl[0].start
+        xs_w = np.nonzero(piece)[1] + sl[1].start
+        yc, x0w, x1w = ys_w.mean(), xs_w.min(), xs_w.max()
+        span = np.zeros_like(rim)
+        span[int(yc):, int(x0w + 0.08 * (x1w - x0w)):int(x1w - 0.08 * (x1w - x0w))] = True
+        lower |= rim & span & nd.binary_dilation(whole(sl, piece), iterations=4)
+    thin &= ~rim
     n2, _ = trace.ink_line_art(sh, full(thin & ~MOUTHZ), pens=('maru', 'saji'), split_mm=0.2, min_len_px=5,
                                beta_px=99, weight=0.8, min_px=1.2, even=0.8, seed=8)
     mouth_l = nd.binary_closing((P['line_soft'] | DARK) & MOUTHZ & ~open_m & ~P['bg'], iterations=2)
+    nl, _ = trace.ink_line_art(sh, full(lower), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.7,
+                               min_px=1.1, even=0.9, seed=18)
+    n2 += nl
     n2m, _ = trace.ink_line_art(sh, full(mouth_l), pens=('maru', 'g_pen'), split_mm=0.12, min_len_px=8, beta_px=99,
                                 weight=0.85, min_px=1.7, even=0.7, seed=12)
     zipl = nd.binary_dilation(jacket, iterations=3) & (P['zip'] | P['line_soft'] & ~P['jacket']) & ~P['bg'] & ~hair_t
