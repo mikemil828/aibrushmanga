@@ -238,13 +238,36 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         out['eye_' + e] = (float(ctr[0]), float(ctr[1]))
         out['eye_vis_' + e] = bool(vis)
         out['eye_size_' + e] = (ex * r * max(shrink, 0.15), ey * r * max(abs(cp), 0.5))
-        out['eye_shape_' + e] = [tuple(q) for q in hull] if vis else None
         # the lids themselves, inner corner to outer, only where the ball under them faces us (in profile
         # the half toward the nose turns edge-on and drops out, leaving the wedge's two sides)
         nrm = np.stack([np.sin(a) * sx, np.zeros_like(a), np.cos(a)], 1)
         show = facing(nrm) > -0.05
-        for name, lid3 in (('upper', up), ('lower', lo)):
-            q = proj(lid3)[0][show]
+        U2, L2 = proj(up)[0][show], proj(lo)[0][show]
+        if vis and len(U2) > 1:
+            # Where the ball turns away, the lids stop short of their corner; close the gap with the
+            # eyeball's own rounded edge (half to each lid, so they meet in a soft corner, not a straight cut).
+            # The bulge points away from the opening's middle.
+            mid = np.r_[U2, L2].mean(0)
+            def close(a_, b_):
+                gap = np.linalg.norm(b_ - a_)
+                if gap < 0.04 * r:
+                    return None
+                m = (a_ + b_) / 2
+                away = m - mid
+                away /= np.linalg.norm(away) + 1e-9
+                ctrl = m + away * 0.22 * gap
+                t = np.linspace(0, 1, 9)[:, None]
+                return (1 - t) ** 2 * a_ + 2 * (1 - t) * t * ctrl + t * t * b_
+            outer = close(U2[-1], L2[-1]) if not show[-1] else None
+            inner = close(U2[0], L2[0]) if not show[0] else None
+            if outer is not None:
+                U2, L2 = np.r_[U2, outer[1:5]], np.r_[L2, outer[7:3:-1]]
+            if inner is not None:
+                U2, L2 = np.r_[inner[4:0:-1], U2], np.r_[inner[4:8], L2]
+        # the opening's outline: the two lids where they show, else the hull of the projected lids
+        shape = np.r_[U2, L2[::-1]] if vis and len(U2) > 1 else hull
+        out['eye_shape_' + e] = [tuple(q) for q in shape] if vis else None
+        for name, q in (('upper', U2), ('lower', L2)):
             out['eye_%s_%s' % (name, e)] = [tuple(v) for v in q] if vis and len(q) > 1 else None
         out['brow_' + e] = tuple(P(x, HEAD['brow'])[0])
     for k in ('nose', 'mouth', 'chin'):
@@ -279,23 +302,36 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         # The search starts 45 degrees off the centre line (the centre is the profile, added below with its nose
         # and lips) and narrows to the contour itself as the head nears profile, where the cheek falls behind
         # the nose and lips and the full cross-section would hide them.
-        th0 = np.deg2rad(45 + 45 * np.clip((abs(turn) - 0.6) / 0.3, 0, 1))
+        th0 = np.deg2rad(45 + 45 * np.clip((abs(turn) - 0.75) / 0.2, 0, 1))
         th = np.linspace(th0, np.pi / 2, 24)
         limb = []
         for xe, ye, ze in contour:
-            zf = np.interp(ye, *PROFILE)
+            # the cheek rounds toward the face's broad front, not toward the nose and lips (those would put
+            # lumps in the cheek): a smooth front depth
+            zf = np.interp(ye, [HEAD['brow'], HEAD['eye'], HEAD['mouth'], HEAD['chin']], [0.97, 0.94, 0.88, 0.76])
             w = abs(xe)
             cand = np.stack([sxf * w * np.sin(th), np.full_like(th, ye), ze + (zf - ze) * np.cos(th)], 1)
             q = proj(cand)[0]
             limb.append(q[np.argmax((q - c) @ right * s_out)])
         sides[far] = np.array(limb)
-        # the jaw corner drops behind the cheek: keep the outer envelope
+        # near profile, and nodding, the jaw corner drops behind the cheek: there keep the outer envelope
         down = np.array([-sr, cr])
         rel = sides[far] - c
         dn, ou = rel @ down, rel @ right * s_out
-        ou = _upper_envelope(dn, ou)
+        env = _upper_envelope(dn, ou)
+        # Away from profile the limb is already the outline row by row and may hollow below the cheekbone;
+        # near profile, and nodding, the jaw corner drops behind the cheek, so there take the envelope. The
+        # profile (nose, lips) breaks the outline only then: further round, the cheek hides it, which keeps
+        # lumps of lip out of a hollow cheek (a manga simplification).
+        near_profile = th0 > np.deg2rad(60) or abs(nod) > 0.3
+        if near_profile:
+            ou = env
+        else:
+            # the jaw corner's sudden depth leaves a small knot in the limb: ease it out
+            k = np.ones(7) / 7
+            ou = np.convolve(np.pad(ou, 3, mode='edge'), k, mode='valid')
         cheek = c + np.outer(dn, down) + np.outer(ou * s_out, right)
-        use_prof = (prof2 - cheek) @ right * s_out > 0
+        use_prof = ((prof2 - cheek) @ right * s_out > 0) & near_profile
         sides[far] = np.where(use_prof[:, None], prof2, cheek)
     out['jaw'] = [tuple(p) for p in sides['l']] + [tuple(p) for p in sides['r'][::-1]]
     if draw:

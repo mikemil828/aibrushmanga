@@ -125,9 +125,10 @@ for e in 'lr':
     opening = poly_mask([tuple(p) for p in U] + [tuple(p) for p in Lo[::-1]])
     openings[e] = opening
     # lash band along the upper lid: thin at the inner corner, heaviest at the outer, plus a flick
-    band_o = [(x + out_dir * 0.06 * rx * wi, y - (0.04 + 0.08 * wi) * ry) for (x, y), wi in zip(U, w)]
-    # its lower edge never drops below 60% of the way down the opening, so the outer end tapers into the corner
-    band_i = [(x, y + min((0.1 + 0.26 * wi) * ry, 0.6 * (ly - y))) for (x, y), (_, ly), wi in zip(U, Lo, w)]
+    band_o = [(x + out_dir * 0.06 * rx * wi, y - (0.07 + 0.13 * wi) * ry) for (x, y), wi in zip(U, w)]
+    # thin inside the opening so the iris's dark top shows under it; never below 45% of the way down
+    # the opening, so the outer end tapers into the corner
+    band_i = [(x, y + min((0.06 + 0.16 * wi) * ry, 0.45 * (ly - y))) for (x, y), (_, ly), wi in zip(U, Lo, w)]
     band_m = poly_mask(band_o + band_i[::-1])
     # iris clipped to the opening, black under the lid, tone fading down, pupil and two catch-lights
     # the iris sits on the lower lid (where its middle crosses it) and runs up under the upper lid
@@ -140,7 +141,7 @@ for e in 'lr':
     # catch-lights just below the lash band (the iris now runs up under it), never on top of it
     lights = (poly_mask(arc((ic[0] - 0.32 * irx, ic[1] - 0.08 * iry), 0.26 * irx, 0.2 * iry, 0, 360, 20)) |
               poly_mask(arc((ic[0] + 0.35 * irx, ic[1] + 0.45 * iry), 0.1 * irx, 0.08 * iry, 0, 360, 12))) & ~band_m
-    face.manga_iris(sh, iris_m, pupil=pupil_m, lights=lights, solid=0.3, fade=0.92, peak=0.72, pupil_r=0.16,
+    face.manga_iris(sh, iris_m, pupil=pupil_m, lights=lights, solid=0.14, fade=0.9, peak=0.8, pupil_r=0.16,
                     sparkles=0, rim=0.7, seed=3)
     sh.fill(pupil_m & iris_m & ~lights)
     sh.fill(band_m)

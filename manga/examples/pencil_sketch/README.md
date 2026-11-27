@@ -68,6 +68,14 @@ cheek: across each height the face rounds from the profile out to the cheek cont
 that stands out furthest. It follows the cheekbone and curves in to the chin. Near profile it hands back to the
 contour, so nose and lips still show.
 
+Fourth pass. Where the eyeball turns away and the lids stop short of their corner (the far eye's outer corner,
+the near eye's inner corner in profile), `head` closes the gap with a rounded edge shared by both lids, so the
+corner is soft instead of cut straight. The lash band is thinner inside the opening and the iris's solid top
+is smaller, so the iris's dark-to-light top shows under the band. The far cheek is now the cheek's limb row by
+row (no convex hull) whenever the head is not near profile, eased with a short moving average, and rounded
+toward a smooth front instead of the nose and lips, so it can hollow a little below the cheekbone in a
+three-quarter view without lumps.
+
 ## Weak spots (honest list)
 
 - Beyond those few shadows the face is flat; there is no form shading on cheek or jaw.
@@ -75,8 +83,9 @@ contour, so nose and lips still show.
 - The ring of light on the hair has a regular sawtooth edge.
 - The shoulders are plain; there is no body under the collar.
 - The far side lock bulges outward just below the crown.
-- The far eye's outer corner, where the lids wrap round the eyeball, ends in a short vertical edge; it reads
-  as lashes here, but a hand would round it.
-- The iris now fills most of the opening and runs up under the lash band, so its dark top is hidden.
-- In a true three-quarter view the far cheek is still only gently curved.
+- With the solid black at the iris top reduced, the eyes read a little lighter than before; the lash band is
+  now the only heavy black on the face.
+- The far cheek hides the nose and lips until the head is nearly in profile (past about 0.75); a realistic
+  three-quarter would let the nose tip break the outline.
+- The eyeball's rounded edge where the lids are cut off is a simple curve, not the ball's true limb.
 - No hairline or neck in the construction itself; the neck is still placed by the example.
