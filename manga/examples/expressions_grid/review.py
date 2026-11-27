@@ -5,6 +5,7 @@
     DUMP=m.npz python3 panel.py && python3 review.py --face 5 --part eyes --masks m.npz   # layers-5-eyes.png
     python3 review.py --pin 79 43              # pin-79-43.png: reference | drawing | classes round a comment pin
     python3 review.py --each iris --masks m.npz   # each-iris.png: every detected iris beside the reference
+                                               # (iris, mouth, teeth: from DUMP; brows: no build needed)
     python3 review.py --each brows             # each-brows.png, detection only (no build): about 8 s
 
 A part is a box in cell fractions (y0, y1, x0, x1), the same as panel.py's zones.
@@ -66,7 +67,10 @@ if __name__ == '__main__':
         if a.masks and a.each in np.load(a.masks).files:
             m = np.load(a.masks)[a.each]
         else:                                        # the masks decided before any ink: no full build needed
-            m = tools.run_until('panel.py', 'with sh.clip(PANEL):')[a.each]
+            ns = tools.run_until('panel.py', 'with sh.clip(PANEL):')
+            if a.each not in ns:                     # irises, mouths, teeth are found while drawing
+                sys.exit(f'{a.each} is decided while drawing: DUMP=m.npz python3 panel.py, then --masks m.npz')
+            m = ns[a.each]
         bx = tools.boxes_of(m, pad=14, min_px=150)
         tools.beside('ref.png', 'panel.png', bx, offset=(M, M), size=(ref.PW, ref.PH), out=f'each-{a.each}.png')
         print(len(bx), 'pieces of', a.each)
