@@ -119,8 +119,9 @@ brows = grown | (P['black'] & nd.binary_dilation(grown, iterations=2))
 mass = big(P['hair'] & ~brows, 5000)
 hair_m = nd.gaussian_filter(nd.binary_closing(mass, iterations=1).astype(np.float32), 0.9) > 0.5
 DARK = P['black'] | P['maroon']                    # lash bands and mouth insides are black and deep brown
-IRIS = np.zeros_like(mass); LIGHTS = IRIS.copy(); MOUTH = IRIS.copy(); SMALL = IRIS.copy()
+IRIS = np.zeros_like(mass); LIGHTS = IRIS.copy(); MOUTH = IRIS.copy(); SMALL = IRIS.copy(); TEETH = IRIS.copy()
 n_ink = 0
+SMUG_BROW_TAIL = [(768.5, 709.2), (778, 710.5), (788, 714.5), (797, 720), (805.5, 726.5)]
 from PIL import Image as _Im
 LUM = np.asarray(_Im.open('ref.png').convert('L').resize((ref.PW, ref.PH), _Im.LANCZOS), np.float32)
 
@@ -175,7 +176,7 @@ with sh.clip(PANEL):
             wide = nd.binary_dilation(bm, iterations=22)
             face.blush_tone(sh, full(wide), peak=0.30, soft_px=40, lpi=LPI, keep=full(eyes_off))
             ys, xs = np.nonzero(bm)
-            face.blush(sh, (xs.mean() + M, ys.mean() + M), np.ptp(xs) / 2, np.ptp(ys) / 2 * 1.15, n=22, pressure=0.3,
+            face.blush(sh, (xs.mean() + M, ys.mean() + M), np.ptp(xs) / 2, np.ptp(ys) / 2 * 1.15, n=22, pressure=0.36, soft=True,
                        seed=20 + i, clip=full(nd.binary_dilation(bm, iterations=8) & ~big(P['white'], 150) & ~hair_m))
         if not strong:
             for sl, piece in comps(nd.binary_opening(P['blush'] & cz, iterations=3), 1500):
@@ -284,9 +285,10 @@ with sh.clip(PANEL):
             teeth |= rest & (np.arange(ref.PH)[:, None] < cy_in)
         shade = nd.binary_opening(teeth & (LUM < 228), iterations=1)       # the teeth in the mouth's corners
         face.open_mouth(sh, full(inside & ~tongue & ~teeth), tongue=full(tongue), teeth=full(teeth), seed=80 + i,
-                        tongue_level=0.2, tongue_core=full(pinkm & tongue), core_level=0.34,
-                        teeth_shade=full(shade), shade_level=0.24)
+                        tongue_level=0.52, tongue_core=full(nd.binary_dilation(pinkm, iterations=1) & tongue),
+                        core_level=0.26, teeth_shade=full(shade), shade_level=0.24, lip=(0.3, 0.5))
         MOUTH |= inside | tongue | teeth
+        TEETH |= teeth
 
     # 8. solid blacks and drawn black lines (lash bands, pupils, outlines): thick parts filled, thin stroked
     blush_band = np.zeros_like(mass)
@@ -301,7 +303,7 @@ with sh.clip(PANEL):
     lsz = nd.sum(lash, ll, np.arange(1, ln + 1))
     lash_big = np.isin(ll, 1 + np.nonzero(lsz > 600)[0])               # the lash bands themselves
     blk = (P['black'] | P['maroon'] & ~IRIS | lash) & ~nd.binary_dilation(brows, iterations=1) & ~(MOUTHZ & ~open_m) & ~hair_edge
-    blk &= ~SMALL
+    blk &= ~SMALL & ~nd.binary_dilation(TEETH, iterations=2)          # the lip line is drawn with the mouth
     # a thin brow can be part outline, part hair colour: the stray hair-coloured bits and pinholes inside it are ink
     blk |= P['hair'] & ~mass & ~brows & BROWZ & nd.binary_dilation(blk, iterations=2)
     holes = nd.binary_fill_holes(blk & BROWZ) & ~blk
@@ -351,9 +353,10 @@ with sh.clip(PANEL):
                                 beta_px=99, weight=0.55, min_px=1.0, even=0.9, seed=16)             # the thin brows of the easy faces
     nb, _ = trace.ink_line_art(sh, full(brow_l), pens=('maru', 'g_pen'), split_mm=0.12, min_len_px=14, beta_px=99,
                                weight=0.9, min_px=1.7, even=0.8, seed=13)
-    # the smug face's right brow fades to a faint tail in the reference, too faint to detect: by hand (ref px)
-    sh.stroke([(M + x * ref.S, M + y * ref.S) for x, y in [(768.5, 709.2), (778, 710.5), (788, 714.5), (797, 720), (805.5, 726.5)]],
-              pen='maru', pressure=0.65, taper=(0.3, 1.0), seed=15)
+    # the smug face's right brow fades into the skin's shadow in the reference and cannot be told from it by
+    # colour: its tail is point data (ref px), like the sweat drops
+    sh.stroke([(M + x * ref.S, M + y * ref.S) for x, y in SMUG_BROW_TAIL], pen='maru', pressure=0.65,
+              taper=(0.3, 1.0), seed=15)
     thin &= ~BROWZ
     n2, _ = trace.ink_line_art(sh, full(thin & ~SHIRT & ~MOUTHZ), pens=('maru', 'saji'), split_mm=0.2, min_len_px=5,
                                beta_px=99, weight=0.8, min_px=1.2, even=0.8, seed=8)

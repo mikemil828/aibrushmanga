@@ -27,11 +27,10 @@ that changes gets the black and the care.
 
 ## Weak spots
 
-- The laughing mouth's teeth are a thinner band than the reference's, and the tongue's darker upper edge is
-  not drawn.
-- The smug face's right brow tail is placed by hand (it is too faint in the reference to detect), so it would
-  not follow a changed reference.
-- The deep blush's hatching is drawn with hard-ended strokes over a soft tone; the strokes do not fade with it.
+- The laughing mouth's teeth are still a slightly thinner band than the reference's, and the tongue's darker
+  upper edge is only the line along it: at this size there is no room for a band of tone.
+- The smug face's right brow tail is point data in `panel.py`: in the reference it fades into the skin's shadow
+  and cannot be separated by colour, so it would not follow a changed reference.
 - The shirt is deliberately plain; its folds are a pale tone, not drawn cloth.
 
 `ref.png` is not covered by the code's license: see `REF-LICENSE.txt`.

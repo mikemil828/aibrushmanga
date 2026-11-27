@@ -199,7 +199,7 @@ def iris(sh, mask, levels, pupil=None, lights=None, rim=0.6, streaks=7, lpi=60, 
 
 
 def open_mouth(sh, inside, tongue=None, teeth=None, tongue_level=0.3, lpi=60, outline=True, seed=0,
-               tongue_core=None, core_level=0.34, teeth_shade=None, shade_level=0.18):
+               tongue_core=None, core_level=0.34, teeth_shade=None, shade_level=0.18, lip=(0.45, 0.7)):
     """An open mouth: the inside in solid black, the tongue a light tone, the teeth left as clean paper, and one
     line round the whole opening. `tongue_core` is a darker middle of the tongue (its rim then reads as the
     lighter edge); `teeth_shade` is the part of the teeth in shadow (the corners). The tongue gets its own line
@@ -231,12 +231,14 @@ def open_mouth(sh, inside, tongue=None, teeth=None, tongue_level=0.3, lpi=60, ou
             tone(sh, _smooth(teeth_shade, 1.0) & tt, level=shade_level, lpi=lpi)
     if outline and whole.any():
         # the lips: one line round the whole opening, so the teeth are held in
-        prep.ink_outline(sh, whole, pen='g_pen', pressure=(0.45, 0.7), sigma=1.2, min_len=10, seed=seed + 1)
+        prep.ink_outline(sh, whole, pen='g_pen', pressure=lip, sigma=1.2, min_len=10, seed=seed + 1)
 
 
-def blush(sh, center, rx, ry, n=7, slant=-62.0, pen='maru', pressure=0.32, length=0.75, seed=0, clip=None):
+def blush(sh, center, rx, ry, n=7, slant=-62.0, pen='maru', pressure=0.32, length=0.75, seed=0, clip=None,
+          soft=False):
     """A blush as manga draws it: `n` short slanted strokes across the cheek inside an ellipse (page px), longest
-    in the middle. More strokes, closer together, for a deeper flush; `slant` is their angle in degrees."""
+    in the middle. More strokes, closer together, for a deeper flush; `slant` is their angle in degrees.
+    `soft` makes the strokes fade at both ends and toward the sides, for hatching laid over `blush_tone`."""
     rng = np.random.default_rng(seed)
     cx, cy = center
     a = np.deg2rad(slant)
@@ -248,6 +250,14 @@ def blush(sh, center, rx, ry, n=7, slant=-62.0, pen='maru', pressure=0.32, lengt
             x = cx + f * rx * 0.92 + rng.normal(0, rx * 0.02)
             L = ry * length * np.sqrt(max(1 - f * f, 0.08)) * rng.uniform(0.8, 1.1)
             y = cy + rng.normal(0, ry * 0.06)
+            if soft:
+                # over a graded tone: each stroke thins out over most of its length and the strokes lighten
+                # toward the ends of the band, so the hatching fades with the tone under it
+                t = 2 * L / sh.ppm0 * 0.42
+                sh.stroke([(x - dx * L, y - dy * L), (x + dx * L, y + dy * L)], pen=pen,
+                          pressure=pressure * (1 - 0.55 * f * f), taper=(t, t), smooth=False,
+                          seed=int(rng.integers(1 << 30)))
+                continue
             sh.stroke([(x - dx * L, y - dy * L), (x + dx * L, y + dy * L)], pen=pen, pressure=pressure,
                       taper=(0.5, 0.7), smooth=False, seed=int(rng.integers(1 << 30)))
     if clip is not None:
