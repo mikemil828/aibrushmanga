@@ -158,7 +158,11 @@ for e in 'lr':
 
 # ---------------------------------------------------------------- 4. face: contour, nose, mouth, ear
 jaw = h['jaw']
-lo_jaw = [p for p in jaw if p[1] > h['eye_l'][1] + 0.3 * R]
+# near side: from below the ear lock down to the chin. Far side: carry the cheek up to the eye line, so it runs
+# in under the far lock (the hair is filled white over it later) instead of stopping short of the hair
+ci = int(np.argmax([p[1] for p in jaw]))
+lo_jaw = ([p for p in jaw[:ci] if p[1] > h['eye_l'][1] + 0.3 * R] +
+          [p for p in jaw[ci:] if p[1] > h['eye_r'][1]])
 sh.stroke(lo_jaw, pen='g_pen', pressure=0.7, taper=(1.5, 2.0))
 n = h['nose']
 sh.stroke([(n[0] + 0.05 * R, n[1] - 0.06 * R), (n[0] + 0.09 * R, n[1] + 0.02 * R), (n[0] + 0.03 * R, n[1] + 0.04 * R)],
