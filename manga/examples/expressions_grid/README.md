@@ -28,10 +28,19 @@ in `manga.tools`.
 
 ## Weak spots
 
-Third round: the ears have an outline against the background (G-pen, clipped to the ear zones away from the
-hair), the blacks round the ears are hairlines, and the collar's folds are graded more strongly.
+Fourth round:
+- Each brow is one tapered stroke, thick at its head and thinning to the tail: the wedge is followed column by
+  column along the thin drawn line that continues it, and its width (measured across the stroke) only narrows
+  after its widest point. A white paper ring goes round each brow before any brow is inked.
+- Brows drawn darker than the hair (line colour) or touching a fringe tip are found by cutting them free of the
+  hair mass with a 3 px gap; a steep fringe tip on a brow's end is removed with a level opening.
+- The lid's shadow on the eye white comes from the lash band only, so no tone shows below an iris's rim.
+- Dark pieces by the ears count as a lash band only next to an eye white; the hair shadow over the ear tops is
+  drawn as hairlines, not solid blobs.
 
-- Where the hair overlaps the ear there are still a few short dark strokes.
+Remaining:
 - The collar folds follow the reference's light, so they read as soft shading rather than drawn creases.
+- A brow head is drawn a little thinner than the reference's widest part on some faces (neutral, worried).
+- A few faces carry a thin tail line past the brow where the reference has a faint forehead crease.
 
 `ref.png` is not covered by the code's license: see `REF-LICENSE.txt`.

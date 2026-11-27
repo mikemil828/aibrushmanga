@@ -12,7 +12,7 @@ Plan (decided before drawing).
   - Collar: navy. A dark tone, with its deepest folds (the inside of the collar) solid black; the zip a
     hairline. Darker than the hair, so the head sits on it, but tone, not a black slab.
   - Skin: paper. Lid folds, nose, ear hollows, the neck under the jaw: one light tone.
-  - Brows: the reference's own wedges (hair-coloured pieces on the skin), inked solid with a paper ring.
+  - Brows: one tapered stroke each, from the thick wedge out along its thin tail, with a paper ring.
   - Eyes: lash bands solid black; the white stays paper with the lid's shadow; the iris in cel layers (dark
     under the lid, amber below, pupil, catch-lights). The shocked face's eyes are big whites with a tiny
     pupil: nothing goes on them.
@@ -99,7 +99,7 @@ def big(m, area):
 
 Z = {k: np.zeros((ref.PH, ref.PW), bool) for k in ('BROWZ', 'EYEZ', 'MOUTHZ', 'CHEEKZ', 'FACE', 'INNER', 'LOW')}
 for i in range(N):
-    Z['BROWZ'] |= cellmask(i, 0.17, 0.37, 0.22, 0.78)
+    Z['BROWZ'] |= cellmask(i, 0.08, 0.37, 0.22, 0.78)       # a raised or shocked brow sits high
     Z['EYEZ'] |= cellmask(i, 0.26, 0.54, 0.20, 0.80)
     Z['MOUTHZ'] |= cellmask(i, 0.55, 0.80, 0.32, 0.68)
     Z['CHEEKZ'] |= cellmask(i, 0.40, 0.68, 0.20, 0.80)
@@ -118,6 +118,39 @@ for sl, piece in comps(nd.binary_opening(P['hair'] & ~bulk & BROWZ, iterations=1
     level = (sl[1].stop - sl[1].start) > 1.5 * (sl[0].stop - sl[0].start)
     if level and (ring & (P['skin'] | P['shadow'] | P['line'])).sum() > 0.5 * ring.sum():
         brows |= wm
+# a brow that touches a fringe tip is joined to the hair's mass. Find those by their vertical runs: a brow is a
+# short run of hair colour with skin (not hair) just above it; a fringe tip's run comes down from the hair.
+runs = np.zeros_like(bulk)
+hz = P['hair'] & BROWZ
+above_ok = P['skin'] | P['shadow'] | P['line'] | P['brown']
+for x in np.nonzero(hz.any(0))[0]:
+    col = hz[:, x]
+    ys_ = np.nonzero(col)[0]
+    starts = ys_[np.r_[True, np.diff(ys_) > 1]]
+    ends = ys_[np.r_[np.diff(ys_) > 1, True]]
+    for y0_, y1_ in zip(starts, ends):
+        if y1_ - y0_ <= 24 and y0_ >= 3 and above_ok[y0_ - 3:y0_, x].any() and not P['hair'][y0_ - 3:y0_, x].all():
+            runs[y0_:y1_ + 1, x] = True
+for sl, piece in comps(nd.binary_opening(runs & ~brows, iterations=1), 150):
+    wm = whole(sl, piece)
+    ring = nd.binary_dilation(wm, iterations=6) & ~wm & ~P['hair']
+    level = (sl[1].stop - sl[1].start) > 2.5 * (sl[0].stop - sl[0].start)
+    below = nd.binary_dilation(wm, iterations=6) & ~wm & (np.arange(ref.PH)[:, None] > (sl[0].start + sl[0].stop) / 2)
+    if level and (below & (P['skin'] | P['shadow'] | P['line'] | P['brown'])).sum() > 0.6 * (below & ~wm).sum():
+        brows |= wm
+# a brow drawn darker than the hair falls in the line class, and its tip may touch a fringe tip. Cut it free of the
+# hair mass by a 3 px gap and take the thick, level, mostly-not-black pieces that lie on skin (the lash bands are black)
+_d = (P['hair'] | P['line'] | P['black'] | P['strand']) & BROWZ & ~nd.binary_dilation(bulk, iterations=3) & ~brows
+_dt = nd.distance_transform_edt(_d)
+for sl, piece in comps(_d, 500):
+    wm = whole(sl, piece)
+    ring = nd.binary_dilation(wm, iterations=5) & ~wm
+    level = (sl[1].stop - sl[1].start) > 1.4 * (sl[0].stop - sl[0].start)
+    if (level and _dt[wm].max() >= 4 and (wm & P['black']).sum() < 0.5 * wm.sum()
+            and (ring & (P['skin'] | P['shadow'])).sum() > 0.65 * ring.sum()):
+        # a thin fringe tip touching the brow's end is not brow: open it away, keep the brow's own body
+        body = nd.binary_opening(wm, iterations=2)
+        brows |= nd.binary_dilation(body, iterations=2, mask=wm) if body.any() else wm
 brows = brows | (P['black'] & nd.binary_dilation(brows, iterations=2))
 # the hair's deepest shadow (under the locks, by the ears) is near black: outside the face it is still hair
 under = nd.binary_dilation(P['hair'] & ~brows, iterations=6, mask=P['black'] & ~INNER
@@ -132,6 +165,78 @@ jk = P['jacket'] & LOW
 jk |= nd.binary_dilation(jk, iterations=30, mask=(P['black'] | P['jacket']) & LOW)
 jacket = nd.gaussian_filter(nd.binary_fill_holes(nd.binary_closing(jk, iterations=3)).astype(np.float32), 1.0) > 0.5
 DARK = P['black'] | P['brown']
+
+# ---- each brow as one stroke: its thick wedge, then followed column by column along the thin drawn tail that
+#      continues it (staying within a few px of where the line is heading), with widths that only narrow
+BROW_STROKES = []
+BROWALL = np.zeros_like(brows)
+_cand = (P['line'] | P['black'] | P['brown'] | P['hair'] & ~bulk) & BROWZ
+
+
+def _follow(cols, ys, step, cand, xlim, ypred_slope):
+    """Walk from the last column outward in direction `step`, picking up the line nearest the predicted y."""
+    out = []
+    x, y = cols[-1], ys[-1]
+    k = ypred_slope
+    gap = 0
+    while gap <= 5 and abs(x - cols[-1]) < xlim:
+        x += step
+        if x < 0 or x >= cand.shape[1]:
+            break
+        yp = y + k * step
+        lo, hi = int(yp - 3), int(yp + 4)
+        hit = np.nonzero(cand[max(lo, 0):hi, x])[0]
+        if len(hit) == 0:
+            gap += 1; y = yp; continue
+        gap = 0
+        yc = hit.mean() + max(lo, 0)
+        k = 0.7 * k + 0.3 * (yc - y) / step
+        y = yc
+        out.append((x, yc, float(len(hit))))
+    return out
+
+
+for i in range(N):
+    cw_i = ref.cell(i)[2] - ref.cell(i)[0]
+    for sl, piece in comps(nd.binary_closing(brows & cellmask(i), iterations=2), 120):
+        if (sl[0].stop - sl[0].start) > (sl[1].stop - sl[1].start):
+            continue
+        wm = whole(sl, piece)
+        # a fringe tip that comes down onto the brow's end is steep and narrow: a level opening drops it
+        lv_wm = nd.binary_opening(wm, structure=np.ones((1, 9), bool))
+        if lv_wm.sum() > 0.6 * wm.sum():
+            wm = big(lv_wm, 0.3 * lv_wm.sum())
+        if not wm.any():
+            continue
+        sl = nd.find_objects(wm.astype(int))[0]
+        cols = np.arange(sl[1].start, sl[1].stop)
+        ys = np.array([np.nonzero(wm[:, x])[0].mean() if wm[:, x].any() else np.nan for x in cols])
+        ws = np.array([wm[:, x].sum() for x in cols], float)
+        ok = ~np.isnan(ys); cols, ys, ws = cols[ok], ys[ok], ws[ok]
+        if len(cols) < 6:
+            continue
+        q = max(len(cols) // 4, 2)
+        thin_right = ws[-q:].mean() < ws[:q].mean()
+        if not thin_right:
+            cols, ys, ws = cols[::-1], ys[::-1], ws[::-1]
+        step = 1 if thin_right else -1
+        slope = np.polyfit(cols[-2 * q:], ys[-2 * q:], 1)[0]
+        tail = _follow(list(cols), list(ys), step, _cand & ~wm & cellmask(i), 0.22 * cw_i, slope)
+        X = np.concatenate([cols, [t[0] for t in tail]]).astype(float)
+        Y = np.concatenate([ys, [t[1] for t in tail]])
+        Wd = np.concatenate([ws, [min(t[2], 4.0) for t in tail]])
+        Wd = Wd / np.sqrt(1 + np.gradient(nd.gaussian_filter1d(Y, 3.0, mode='nearest')) ** 2)   # across, not down
+        sel = np.arange(0, len(X), 3)
+        pts = np.column_stack([X[sel], nd.gaussian_filter1d(Y, 2.0, mode='nearest')[sel]])
+        w = nd.gaussian_filter1d(Wd, 2.0, mode='nearest')[sel]
+        w = np.maximum(w, 1.5)
+        k = int(np.argmax(w))                        # from its widest point on, the brow only narrows
+        w[k:] = np.minimum.accumulate(w[k:])
+        BROW_STROKES.append((pts, w))
+        line = np.zeros_like(wm)
+        for x_, y_ in zip(X.astype(int), Y.astype(int)):
+            line[max(y_ - 4, 0):y_ + 5, x_] = True
+        BROWALL |= nd.binary_dilation(wm, iterations=2) | line
 IRIS = np.zeros_like(mass); BAND = IRIS.copy(); LIGHTS = IRIS.copy(); MOUTH = IRIS.copy(); SMALL = IRIS.copy(); TEETH = IRIS.copy()
 
 with sh.clip(PANEL):
@@ -232,7 +337,9 @@ with sh.clip(PANEL):
                       rim=0.3 if half else 0.6, streaks=3 if half else 6)
             LIGHTS |= lights
         # (the reference draws its own lower lids: they come with the thin lines)
-        face.eye_white(sh, full(P['white'] & ez & ~IRIS & ~LIGHTS), full(DARK & ez), depth=4, level=0.2)
+        # the lid's shadow falls from the lash band only: the iris's own dark rim casts none, or tone shows below it
+        face.eye_white(sh, full(P['white'] & ez & ~IRIS & ~LIGHTS),
+                       full(DARK & ez & ~nd.binary_dilation(IRIS & ez, iterations=7)), depth=4, level=0.2)
         # 5. mouth: the opening is the hull of the dark inside, tongue and teeth; white pieces are teeth
         # the inside of an open mouth is a thick dark piece; the jaw's outline crossing the zone is a thin one
         inside = nd.binary_closing(DARK & mz, iterations=2)
@@ -273,14 +380,24 @@ with sh.clip(PANEL):
     lash = nd.binary_closing(DARK & EYEZ, iterations=2) & ~IRIS & ~P['white'] & ~P['skin']
     ll, ln = nd.label(lash)
     lash_big = np.isin(ll, 1 + np.nonzero(nd.sum(lash, ll, np.arange(1, ln + 1)) > 500)[0])
+    # a lash band lies on an eye white; a big dark piece away from any white is hair shadow over the ear
+    _near_w = np.unique(ll[nd.binary_dilation(P['white'] & EYEZ, iterations=8) & lash])
+    lash_big &= np.isin(ll, _near_w[_near_w > 0])
+    _ears = np.zeros_like(lash)
+    for i in range(N):
+        _ears |= cellmask(i, 0.30, 0.72, 0.10, 0.33) | cellmask(i, 0.30, 0.72, 0.67, 0.90)
+    lash_big &= ~_ears | nd.binary_dilation(P['white'] & EYEZ, iterations=12)   # out by the ears: hair shadow
     blk = (P['black'] | P['brown'] & ~IRIS & EYEZ | lash) & ~nd.binary_dilation(brows, iterations=1)
     blk &= ~(MOUTHZ & ~open_m) & ~hair_edge & ~SMALL & ~open_m & ~jacket & ~nd.binary_erosion(IRIS, iterations=2)   # face.iris owns it
+    blk &= ~BROWALL
     tips = blk & nd.binary_dilation(hair_t, iterations=5) & ~lash_big
     # round the ears (outside the face) every black is a drawn line: hairlines, never filled blobs
     EARS = np.zeros_like(blk)                       # the ears reach in past INNER's edge
     for i in range(N):
         EARS |= cellmask(i, 0.30, 0.72, 0.10, 0.33) | cellmask(i, 0.30, 0.72, 0.67, 0.90)
-    tips |= blk & (~INNER | EARS) & ~LOW & ~lash_big & ~EYEZ
+    # (the eye zone reaches the ears too: there only the blacks next to an eye white stay solid)
+    tips |= blk & (~INNER | EARS) & ~LOW & ~lash_big & ~(EYEZ & ~EARS) \
+        & ~nd.binary_dilation(P['white'] & EYEZ, iterations=12)
     # the dark rim round an eye white, away from the lash band, is a lid line: a hairline, not a heavy ink
     whites_b = big(P['white'] & EYEZ & ~LIGHTS, 200)
     lidb = blk & nd.binary_dilation(whites_b, iterations=4) & EYEZ & ~lash_big & ~nd.binary_dilation(IRIS, iterations=2) \
@@ -292,22 +409,22 @@ with sh.clip(PANEL):
                                 min_px=1.2, even=0.85, seed=19)
     nt, _ = trace.ink_line_art(sh, full(tips), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.45,
                                min_px=1.0, even=0.95, seed=14)
-    # 6b. brows over the lashes: each the reference's own wedge with a paper ring
-    wedges = []
-    for i in range(N):
-        for sl, piece in comps(nd.binary_closing(brows & cellmask(i), iterations=2), 120):
-            if (sl[0].stop - sl[0].start) > (sl[1].stop - sl[1].start):
-                continue
-            wedges.append(nd.gaussian_filter(nd.binary_dilation(whole(sl, piece), iterations=1)
-                                             .astype(np.float32), 0.7) > 0.5)
-    for bm in wedges:
-        sh.fill(full(nd.binary_dilation(bm, iterations=2) & ~hair_t), mode='white')
-    for bm in wedges:
-        face.ink_shape(sh, full(bm), sigma=0)
+    # 6b. brows over the lashes: one tapered stroke each, from thick to thin, with a paper ring round it
+    from manga import geom
+    for pts, w in BROW_STROKES:                      # paper ring: the same stroke, 4 px wider, in white
+        Qc = geom.catmull(nd.gaussian_filter1d(np.asarray(pts, float) + M, 2.0, axis=0, mode='nearest'), per=6)
+        wq = np.interp(np.linspace(0, 1, len(Qc)), np.linspace(0, 1, len(w)), w + 4)
+        nq = geom.normals(Qc)
+        with sh.clip(full(~hair_t)):
+            sh.fill([tuple(p) for p in np.vstack([Qc + nq * wq[:, None] / 2, (Qc - nq * wq[:, None] / 2)[::-1]])],
+                    mode='white')
+    for pts, w in BROW_STROKES:
+        face.brow(sh, [(x + M, y + M) for x, y in pts], w, smooth=2.0)
     # 7. thin lines: creases, nose, mouth lines, ears, jaw, sweat drops, the zip
     free = ~nd.binary_dilation(DARK, iterations=2) & ~hair_m & ~brows & ~nd.binary_dilation(IRIS, iterations=2) \
         & ~hair_edge & ~jacket & ~P['bg']
     thin = P['line'] & free & ~open_m & ~(BAND & ~P['black'])      # the band's edge is not a line
+    thin &= ~BROWALL
     # the eye white's own grey rim: only its lower half is a lid, drawn as a light hairline; the rest of the rim
     # (round the corners, past the lash band) is left out, or every eye gets a ring
     whites = big(P['white'] & EYEZ & ~LIGHTS, 200)
