@@ -45,7 +45,7 @@ Replay larger for print: `python -m manga.replay page.jsonl --scale 3 --out page
 | `Frame` | A reference image placed on the page. `P`/`pts` map reference px to page px, `up`/`upm` scale arrays and masks, `lay` lays tone from reference-sized masks and levels, `poly`/`disc`/`line` draw hand-placed shapes given in reference px. |
 | `nature` | Drawn vegetation: `blade`, `edge_grass` (blades along a bank's edges, leaning outward), `tufts`, `seedlings` (plants in water, with reflections). `depth(y)` sets size and density by distance. |
 | `water` | Still water: `calm_level` (line tone without streaks from things standing in it), `fill_under` (no halos around them), `mirror` (reflections), `ripples`. Use `angle=water.HORIZONTAL` for line tone. |
-| `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference), `pin` (the page round a review comment pinned at x%, y%, beside the same area of the reference), `cut_parts` (what a panel edge or cut takes off a figure: a sawn-off finger shows up as a small loss from a big piece). |
+| `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference), `pin` (the page round a review comment pinned at x%, y%, beside the same area of the reference), `cut_parts` (what a panel edge or cut takes off a figure: a sawn-off finger shows up as a small loss from a big piece). `layers` (reference, drawing and masks side by side), `before_after` (a review round on one sheet), `strip` (one part of every figure in a grid), `probe` (colour and classes along a line), `keep` (save a script's masks when `DUMP` is set). |
 | `face` | The parts an expression is made of: `brow` (a tapered solid shape; `ribbon_of` measures one from a mask), `iris` (cel layers, rim, streaks, pupil, catch-lights), `eye_white` (the lid's shadow), `open_mouth` (black inside, toned tongue with a darker core, paper teeth with shaded corners, one lip line), `blush` (slanted hatching), `blush_tone` (a graded tone that fades out at its edge), `gloom` (vertical line tone for dread), `sweat`, `closed_eye`, `closed_smile`. See `examples/expressions`. |
 | `replay` | `python -m manga.replay journal.jsonl --scale S --out file.png [--bw] [--until N]` |
 
@@ -83,6 +83,28 @@ Learned from review comments on the pool page:
 13. **An expression is three places.** Brows, eyes and mouth carry it; give them the black and keep the rest of
    the head quiet (hair in tone, not solid black, or black brows vanish against it). Check each face small: if
    the feeling doesn't read at thumbnail size, the brows or the mouth are too thin.
+
+Learned on the expressions panel, over four review rounds:
+
+14. **Look with three tools, not a new script each round.** `tools.strip` shows one part of every figure (all
+    eyes), because a fix to one face often breaks another. `tools.layers` puts reference, drawing and the masks
+    behind them side by side: a wrong drawing over a right mask is a drawing bug, a wrong mask is a detection
+    bug. Leave `tools.keep(...)` at the end of the script and run it with `DUMP=m.npz` to get those masks.
+    `examples/expressions/review.py` wires all three up; copy it for a new example.
+15. **Send `tools.before_after` with every round.** Copy the output aside before rebuilding. The client sees each
+    change without hunting for it, and you catch a regression before they do.
+16. **Ask colour once, then stop.** `tools.probe` samples a line across a feature (down a mouth, along a faint
+    brow). If the classes overlap there, no threshold will separate it: make it point data in reference px
+    (like the sweat drops), say so in the README, and move on. Two rounds went into a brow tail that sat in the
+    skin's shadow.
+17. **Shape before colour for closed shapes.** An iris or an open mouth is convex: take the hull of its coloured
+    pieces, then split it by position (teeth above the dark inside, tongue below). Colour alone left horns,
+    gaps and doubled outlines.
+18. **One owner per pixel.** When a helper draws a part (iris, teeth, brow wedge), take that area out of the traced
+    blacks and line passes, and lay every paper ring before any ink. Otherwise a later pass redraws it: a dot
+    beside the iris, a second lip line, a ring eating a neighbour.
+19. **Gradients as graded tone, not bands.** A flush is `face.blush_tone` (fades with distance from its edge) over
+    an area wider than the colour class, with `face.blush(..., soft=True)` hatching that fades with it.
 
 ## Examples
 

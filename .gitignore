@@ -21,3 +21,7 @@ manga/examples/expressions/parts.npz
 manga/examples/expressions/parts_preview.png
 manga/examples/expressions/panel*.png
 manga/examples/expressions/page.jsonl
+manga/examples/expressions/eyes.png
+manga/examples/expressions/mouths.png
+manga/examples/expressions/before-after.png
+manga/examples/expressions/layers-*.png

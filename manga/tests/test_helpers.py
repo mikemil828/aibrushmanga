@@ -245,3 +245,28 @@ def test_face_blush_gloom_and_sweat():
     face.sweat(sh, (300, 220), 30)
     assert sh.ink[200:245, 285:315].sum() > 10               # an outline
     assert sh.ink[222:228, 302:308].mean() < 0.2             # paper inside
+
+
+def test_tools_layers_before_after_strip_probe_keep(tmp_path, monkeypatch):
+    from manga import tools
+    from PIL import Image
+    ref = np.zeros((40, 60, 3), np.uint8); ref[10:20, 10:30] = (255, 0, 0)
+    drawn = np.full((60, 80, 3), 240, np.uint8); drawn[20:30, 20:40] = 0         # offset (10, 10)
+    m = np.zeros((40, 60), bool); m[10:20, 10:30] = True
+    c = tools.layers(Image.fromarray(ref), Image.fromarray(drawn), (5, 5, 35, 25), [(m, (0, 0, 255))],
+                     offset=(10, 10), zoom=1)
+    a = np.asarray(c)
+    assert c.size == (90, 20)
+    assert tuple(a[10, 15]) == (255, 0, 0) and a[10, 45].max() < 10 and tuple(a[10, 75]) == (0, 0, 255)
+    old = Image.fromarray(np.full((50, 50, 3), 255, np.uint8)); new = Image.fromarray(np.zeros((50, 50, 3), np.uint8))
+    ba = np.asarray(tools.before_after(old, new, [(0, 0, 20, 10), (10, 10, 30, 30)], width=40, gap=4))
+    assert ba.shape == (20 + 4 + 40, 84, 3) and ba[5, 5].min() == 255 and ba[5, 60].max() == 0
+    s = tools.strip(new, [(0, 0, 10, 10)] * 5, cols=4)
+    assert s.size == (40, 20)
+    P = {'red': m, 'none': np.zeros_like(m)}
+    assert tools.probe(P, Image.fromarray(ref), [(15, 15), (50, 30)]) == [(15, 15, (255, 0, 0), ['red']),
+                                                                          (50, 30, (0, 0, 0), [])]
+    monkeypatch.delenv('DUMP', raising=False)
+    assert tools.keep(a=m) is None
+    p = tools.keep(str(tmp_path / 'd.npz'), a=m)
+    assert np.load(p)['a'].sum() == m.sum()

@@ -23,7 +23,7 @@ import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
 import numpy as np
 from scipy import ndimage as nd
-from manga import Sheet, tone, trace, effects, face
+from manga import Sheet, tone, trace, effects, face, tools
 from manga import prep as mprep
 import prep as ref
 
@@ -377,6 +377,7 @@ with sh.clip(PANEL):
     # 11. fear: three sweat drops, placed by hand from the reference (ref px)
     for (x, y, size, tilt) in [(174.2, 819.5, 13, 8), (181.5, 843, 14, 6), (311.8, 843, 15, -6)]:
         face.sweat(sh, (M + x * ref.S, M + y * ref.S), size * ref.S, tilt)
+tools.keep(brows=brows, iris=IRIS, small=SMALL, lights=LIGHTS, blk=blk, tips=tips, mouth=MOUTH, teeth=TEETH)
 effects.border(sh, PANEL, 0.8)
 sh.png('panel.png'); sh.close()
 print('strokes', sh.stats['strokes'], 'traced lines', n_ink, round(time.time() - t0), 's')

@@ -3,6 +3,10 @@
     gridcrop('ref.png', (620, 960, 760, 1240), step=10, scale=4, out='g_fig.png')   # read polygon points off it
     fragment(lambda sh: walker(sh), (W, H), box=(1000, 1500, 1350, 2150), out='wt.png', zoom=2)
     compare('panel.png', 'ref.png', box_page, box_ref, out='cmp.png')               # drawn | reference
+    layers('ref.png', 'panel.png', box, [(P['pink'], (255, 120, 160)), (iris, (0, 0, 255))], offset=(88, 88))
+    before_after('old.png', 'panel.png', boxes, out='ba.png')                        # what the client sees
+    strip('panel.png', eye_boxes, cols=4)                                            # one part of every figure
+    probe(P, 'ref.png', [(400, y) for y in range(360, 460, 3)])                      # can colour separate it?
 """
 import numpy as np
 from PIL import Image, ImageDraw
@@ -100,3 +104,90 @@ def cut_parts(mask, kept, min_px=30):
                         bbox=(int(xs.min() + sl[1].start), int(ys.min() + sl[0].start),
                               int(xs.max() + sl[1].start + 1), int(ys.max() + sl[0].start + 1))))
     return sorted(out, key=lambda d: -d['lost'])
+
+
+# ---- learned on the expressions panel: each round I rewrote the same three throwaway scripts ----
+
+def _crop_scaled(im, box, width):
+    c = im.crop(tuple(int(round(v)) for v in box))
+    return c.resize((width, max(1, round(c.height * width / c.width))), Image.LANCZOS)
+
+
+def layers(ref, drawn, box, masks=(), offset=(0, 0), out=None, zoom=3, back=(128, 128, 128)):
+    """Why a part came out wrong: the reference, the drawing and the masks behind it, side by side for one `box`
+    (reference px). `masks` is a list of (bool array at reference size, (r, g, b)), painted in order over grey, so
+    later ones win: e.g. the colour classes from prep, then a mask the script built (iris, teeth, tips).
+    `offset` is where reference (0, 0) lands on the drawing (the panel margin). Read the three together: a
+    wrong drawing over a right mask is a drawing bug; a wrong mask is a prep or detection bug."""
+    x0, y0, x1, y1 = [int(v) for v in box]
+    a = np.asarray(_img(ref).convert('RGB'))
+    if a.shape[:2] != (masks[0][0].shape if masks else a.shape[:2]):
+        a = np.asarray(_img(ref).convert('RGB').resize((masks[0][0].shape[1], masks[0][0].shape[0]), Image.LANCZOS))
+    d = np.asarray(_img(drawn).convert('RGB'))
+    ox, oy = offset
+    m = np.empty((y1 - y0, x1 - x0, 3), np.uint8); m[:] = back
+    for mask, col in masks:
+        m[np.asarray(mask, bool)[y0:y1, x0:x1]] = col
+    row = np.concatenate([a[y0:y1, x0:x1], d[y0 + oy:y1 + oy, x0 + ox:x1 + ox], m], 1)
+    c = Image.fromarray(row).resize((row.shape[1] * zoom, row.shape[0] * zoom), Image.NEAREST)
+    if out:
+        c.save(out)
+    return c
+
+
+def before_after(old, new, boxes, out=None, width=1000, gap=12):
+    """One sheet for a review round: for each box (drawing px), the previous drawing on the left and the new one
+    on the right. Copy the current output aside before rebuilding and pass it as `old`; this sheet is what goes
+    to the client, so they see each change without hunting for it."""
+    a, b = _img(old).convert('RGB'), _img(new).convert('RGB')
+    rows = [(_crop_scaled(a, bx, width), _crop_scaled(b, bx, width)) for bx in boxes]
+    c = Image.new('RGB', (2 * width + gap, sum(r[0].height + gap for r in rows) - gap), 'white')
+    y = 0
+    for l, r in rows:
+        c.paste(l, (0, y)); c.paste(r, (width + gap, y)); y += l.height + gap
+    if out:
+        c.save(out)
+    return c
+
+
+def strip(img, boxes, cols=4, width=None, out=None):
+    """The same part of several figures in one grid (all eyes, all mouths): a fix to one face often breaks
+    another, and this shows every face at once. `boxes` are drawing px; `width` scales each tile."""
+    im = _img(img).convert('RGB')
+    tiles = [im.crop(tuple(int(round(v)) for v in bx)) for bx in boxes]
+    if width:
+        tiles = [t.resize((width, max(1, round(t.height * width / t.width))), Image.LANCZOS) for t in tiles]
+    tw, th = max(t.width for t in tiles), max(t.height for t in tiles)
+    rows = (len(tiles) + cols - 1) // cols
+    c = Image.new('RGB', (tw * min(cols, len(tiles)), th * rows), 'white')
+    for k, t in enumerate(tiles):
+        c.paste(t, ((k % cols) * tw, (k // cols) * th))
+    if out:
+        c.save(out)
+    return c
+
+
+def probe(parts, img, pts):
+    """What the reference has at each point: [(x, y, (r, g, b), [class names])]. `parts` is a dict (or npz) of
+    bool masks at the image's size. Sample a line across a feature (down the middle of a mouth, along a faint
+    brow) before guessing thresholds: it shows at once whether colour can separate it at all."""
+    a = np.asarray(_img(img).convert('RGB'))
+    names = list(parts.keys()) if hasattr(parts, 'keys') else list(parts.files)
+    if a.shape[:2] != parts[names[0]].shape:
+        h, w = parts[names[0]].shape
+        a = np.asarray(_img(img).convert('RGB').resize((w, h), Image.LANCZOS))
+    out = []
+    for x, y in pts:
+        x, y = int(round(x)), int(round(y))
+        out.append((x, y, tuple(int(v) for v in a[y, x]), [k for k in names if parts[k][y, x]]))
+    return out
+
+
+def keep(path=None, **arrays):
+    """Save the masks a drawing script built, for `layers` afterwards. Does nothing unless `path` is given or
+    the DUMP environment variable is set, so it can stay in the script: `DUMP=m.npz python3 panel.py`."""
+    import os
+    path = path or os.environ.get('DUMP')
+    if path:
+        np.savez_compressed(path, **{k: np.asarray(v) for k, v in arrays.items()})
+    return path
