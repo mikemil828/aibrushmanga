@@ -283,8 +283,9 @@ def run_until(script, marker, **env):
     """Run a drawing script up to the line holding `marker` and return its variables, without drawing the rest.
     Detection (brows, irises, mouths) is decided before any ink, so it can be tried in seconds instead of the
     whole build: `ns = tools.run_until('panel.py', '# ---- each brow'); ns['brows']`. Runs in the script's own
-    folder, with that folder on sys.path. `env` adds variables before the run."""
-    import os, sys
+    folder, with that folder on sys.path; argv[1] is a throwaway path, so a script that journals to argv[1] leaves
+    its real journal alone. `env` adds variables before the run."""
+    import os, sys, tempfile
     script = os.path.abspath(script)
     src = open(script).read()
     k = src.find(marker)
@@ -293,9 +294,10 @@ def run_until(script, marker, **env):
     src = src[:src.rfind('\n', 0, k) + 1]
     here, cwd = os.path.dirname(script), os.getcwd()
     ns = {'__name__': '__run_until__', '__file__': script, **env}
-    sys.path.insert(0, here); os.chdir(here)
+    argv = sys.argv
+    sys.path.insert(0, here); os.chdir(here); sys.argv = [script, os.path.join(tempfile.mkdtemp(), 'journal.jsonl')]   # not the real journal
     try:
         exec(compile(src, script, 'exec'), ns)
     finally:
-        os.chdir(cwd); sys.path.remove(here)
+        os.chdir(cwd); sys.path.remove(here); sys.argv = argv
     return ns
