@@ -16,6 +16,7 @@ from .pens import Pen, get as get_pen
 
 PAPER = (247, 245, 239)
 INK = (18, 17, 20)
+SKETCH_RGB = (96, 150, 214)       # non-photo blue: the pencil layer as shown on screen, never printed
 
 
 def _poly_mask(poly, W, H, k=1.0):
@@ -35,6 +36,7 @@ class Sheet:
         self.ink_rgb = tuple(ink)
         self.seed = int(seed)
         self.ink = np.zeros((self.H, self.W), np.float32)
+        self.sketch = None                      # pencil layer, allocated on first use
         self._clips = []
         self._n = 0
         self._journal = None
@@ -137,13 +139,22 @@ class Sheet:
         cl = self._clip_region(cx0, cy0, cx1, cy1)
         if cl is not None:
             c = c * cl
+        if mode in ('sketch', 'erase'):
+            if self.sketch is None:
+                self.sketch = np.zeros((self.H, self.W), np.float32)
+            dst = self.sketch[cy0:cy1, cx0:cx1]
+            if mode == 'sketch':
+                dst += c * (1.0 - dst)
+            else:
+                dst *= (1.0 - c)
+            return
         dst = self.ink[cy0:cy1, cx0:cx1]
         if mode == 'ink':
             dst += c * (1.0 - dst)
         elif mode == 'white':
             dst *= (1.0 - c)
         else:
-            raise ValueError(f"mode must be 'ink' or 'white', not {mode!r}")
+            raise ValueError(f"mode must be 'ink', 'white', 'sketch' or 'erase', not {mode!r}")
 
     # ------------------------------------------------------------------ strokes
     def stroke(self, points, pen='g_pen', pressure=0.7, seed=None, mode='ink', taper=None, smooth=True):
@@ -152,7 +163,8 @@ class Sheet:
         points   -- [(x, y), ...] or [(x, y, pressure), ...] in base px. Two points make a straight line.
         pressure -- used when points carry none: the body pressure (the pen's taper still opens and closes it).
         taper    -- (in_mm, out_mm) to override the pen's entry/exit taper; (0, 0) for a blunt line.
-        mode     -- 'ink' or 'white' (white-out over ink and tone).
+        mode     -- 'ink' or 'white' (white-out over ink and tone); 'sketch' or 'erase' draw on or rub out the
+                    pencil layer, which is shown only on request and never printed.
         """
         pen = get_pen(pen)
         P = np.asarray(points, float)
@@ -222,6 +234,22 @@ class Sheet:
             cov = cov * pen.ink
         self._put(cov, x0, y0, mode)
 
+    # ------------------------------------------------------------------ pencil sketch layer
+    def pencil(self, points, pressure=0.5, seed=None, smooth=True, pen='pencil'):
+        """A pencil line on the sketch layer: construction, gesture, rough shapes. Never printed."""
+        self.stroke(points, pen=pen, pressure=pressure, seed=seed, mode='sketch', smooth=smooth)
+
+    def erase(self, points, width_mm=3.0, smooth=True):
+        """Rub out part of the sketch layer along a path (a kneaded eraser). Ink is untouched."""
+        pen = Pen('eraser', width_mm, width_mm, taper_in_mm=0.0, taper_out_mm=0.0, wobble_mm=0.0)
+        self.stroke(points, pen=pen, pressure=1.0, mode='erase', smooth=smooth)
+
+    def clear_sketch(self):
+        """Drop the whole sketch layer, as when the pencil is rubbed out after inking."""
+        self._log({'op': 'clear_sketch'})
+        self._n += 1
+        self.sketch = None
+
     # ------------------------------------------------------------------ flat fills (beta) and tone
     def fill(self, mask, mode='ink', amount=1.0):
         """Solid black (beta) or solid white over a mask."""
@@ -237,17 +265,25 @@ class Sheet:
         self._put(self.raster(cov), 0, 0, mode)
 
     # ------------------------------------------------------------------ output
-    def image(self, bw=False):
+    def image(self, bw=False, sketch=False):
+        """The page as an image. sketch=True shows the pencil layer in non-photo blue under the ink;
+        sketch='only' shows the pencil alone. Print output (bw) never shows it."""
         a = self.ink
         if bw:
             a = (a > 0.5).astype(np.float32)
         p = np.array(self.paper, np.float32)
         q = np.array(self.ink_rgb, np.float32)
-        rgb = p * (1 - a[..., None]) + q * a[..., None]
+        base = np.broadcast_to(p, a.shape + (3,))
+        if sketch and not bw and self.sketch is not None:
+            sk = np.clip(self.sketch, 0, 1)[..., None]
+            base = base * (1 - 0.85 * sk) + np.array(SKETCH_RGB, np.float32) * 0.85 * sk
+            if sketch == 'only':
+                a = np.zeros_like(a)
+        rgb = base * (1 - a[..., None]) + q * a[..., None]
         return Image.fromarray(np.clip(rgb + 0.5, 0, 255).astype(np.uint8))
 
-    def png(self, path, bw=False, crop=None, dpi=None):
-        im = self.image(bw)
+    def png(self, path, bw=False, crop=None, dpi=None, sketch=False):
+        im = self.image(bw, sketch)
         if crop:
             im = im.crop(tuple(int(round(v * self.k)) for v in crop))
         if bw:

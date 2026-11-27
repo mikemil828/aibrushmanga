@@ -52,6 +52,7 @@ b4, legal) shrinks the page to the paper; leave it out to print at the page's ow
 | `nature` | Drawn vegetation: `blade`, `edge_grass` (blades along a bank's edges, leaning outward), `tufts`, `seedlings` (plants in water, with reflections). `depth(y)` sets size and density by distance. |
 | `water` | Still water: `calm_level` (line tone without streaks from things standing in it), `fill_under` (no halos around them), `mirror` (reflections), `ripples`. Use `angle=water.HORIZONTAL` for line tone. |
 | `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference), `pin` (the page round a review comment pinned at x%, y%, beside the same area of the reference), `cut_parts` (what a panel edge or cut takes off a figure: a sawn-off finger shows up as a small loss from a big piece). `layers` (reference, drawing and masks side by side), `before_after` (a review round on one sheet), `strip` (one part of every figure in a grid), `probe` (colour and classes along a line), `keep` (save a script's masks when `DUMP` is set). |
+| `sketch` | The pencil layer: `Sheet.pencil` draws on it (shown in non-photo blue with `png(..., sketch=True)` or `'only'`, replay `--sketch on`; never in the page or print files), `Sheet.erase` rubs part of it out, `Sheet.clear_sketch` drops it. Construction helpers: `head` (Loomis construction in 3D: cranium ball with flat side planes, ears, jaw, centre and feature lines, from facing us to a full profile and looking up or down; returns the eye, brow, nose, mouth, chin, ear and jaw points for inking), `ellipse` (loose freehand laps), `line` (ruled guide), `curve` (gesture), `figure` (stick-and-bean body), `perspective` (horizon and rays from vanishing points). See `examples/pencil_sketch`. |
 | `face` | The parts an expression is made of: `brow` (a tapered solid shape; `ribbon_of` measures one from a mask), `iris` (cel layers, rim, streaks, pupil, catch-lights), `eye_white` (the lid's shadow), `open_mouth` (black inside, toned tongue with a darker core, paper teeth with shaded corners, one lip line), `blush` (slanted hatching), `blush_tone` (a graded tone that fades out at its edge), `gloom` (vertical line tone for dread), `sweat`, `closed_eye`, `closed_smile`. See `examples/expressions`. |
 | `replay` | `python -m manga.replay journal.jsonl --scale S --out file.png [--bw] [--until N]`, or `--dpi 600 [--fit letter] --bw` for a printer |
 
@@ -145,6 +146,11 @@ Learned from a published page (measured, not kept):
     the face; a few blacks. `face.manga_iris` draws a mostly paper iris, `face.lid_dashes` a lower lid as
     dashes, and `effects.halo` the white gap that cuts a figure off a patterned background.
 
+27. **Without a reference, pencil first.** Try two or three poses as pencil thumbnails (seconds each), pick one,
+    construct it with `sketch.head`/`figure`, rough the features, and look at `png(..., sketch='only')` before
+    any ink. Ink along the points the construction returned, then check `sketch=True` (the ink over the
+    pencil) to see where the ink wandered from the decision.
+
 ## Examples
 
 - `examples/sampler.py`: every tool on one sheet.
@@ -155,6 +161,8 @@ Learned from a published page (measured, not kept):
 - `examples/expressions_grid/`: nine expressions of a boy in a 3 x 3 grid with a dark collar; irises layered by
   position and filled to their rim, brows as single tapered strokes, gritted teeth, a blush band (see its
   README). Its `review.py` has `--pin` and `--each`.
+- `examples/pencil_sketch/`: a girl's bust drawn without a reference: two pose thumbnails, the pencil
+  construction, then ink over it. Shows the sketch layer and `manga.sketch` (see its README).
 - `examples/rice_field/`: a single landscape panel (paddies, village, mountains, a walker) drawn from a reference
   image. It shows line tone for water, dot tone for land, and hand-drawn seedlings and figure (see its README).
 

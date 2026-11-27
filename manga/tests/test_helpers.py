@@ -353,3 +353,73 @@ def test_replay_for_a_printer(tmp_path):
     assert im.mode == '1' and round(im.info['dpi'][0]) == 300
     assert abs(im.width - round(30 / 25.4 * 300)) <= 1          # 30 mm wide page, fits A4, so no shrink
     assert abs((1 - np.asarray(im, np.float32)).mean() - 0.4) < 0.03
+
+
+def test_pencil_layer_never_reaches_ink_or_print(tmp_path):
+    from PIL import Image
+    from manga import replay as rp
+    j = tmp_path / 's.jsonl'
+    sh = Sheet(200, 160, px_per_mm=8.0, journal=str(j))
+    sh.pencil([(20, 20), (180, 140)], pressure=0.8)
+    sh.stroke([(20, 140), (180, 20)], pen='g_pen', pressure=0.8)
+    assert sh.sketch is not None and sh.sketch.max() > 0.2
+    plain = np.asarray(sh.image().convert('L'))
+    assert plain[40, 45] > 240                          # pencil only on that spot: not in the page image
+    shown = np.asarray(sh.image(sketch=True))
+    assert shown[40, 45, 2] > shown[40, 45, 0] + 30     # shown in blue on request
+    assert np.array_equal(np.asarray(sh.image(bw=True, sketch=True)), np.asarray(sh.image(bw=True)))
+    sh.erase([(10, 10), (60, 50)], width_mm=4)
+    assert sh.sketch[40, 45] < 0.05
+    sh.close()
+    re = rp.replay(str(j))
+    assert np.allclose(re.sketch, sh.sketch, atol=1e-5) and np.allclose(re.ink, sh.ink, atol=1e-5)
+
+
+def test_head_construction_points():
+    from manga import sketch
+    sh = Sheet(600, 600, px_per_mm=8.0)
+    front = sketch.head(sh, (300, 250), 100, draw=False)
+    assert abs(front['eye_l'][1] - front['eye_r'][1]) < 1 and front['chin'][1] > front['mouth'][1] > front['eye_l'][1]
+    assert abs(front['eye_size_l'][0] - front['eye_size_r'][0]) < 1e-6
+    turned = sketch.head(sh, (300, 250), 100, turn=0.4, draw=True)
+    assert turned['eye_size_r'][0] < turned['eye_size_l'][0]          # the far eye is the narrow one
+    assert turned['chin'][0] > front['chin'][0]                         # the face swings toward the turn
+    assert sh.sketch is not None and float(np.asarray(sh.image().convert('L')).min()) > 240
+
+
+def test_head_side_planes_and_profile():
+    from manga import sketch
+    sh = Sheet(600, 600, px_per_mm=8.0)
+    front = sketch.head(sh, (300, 250), 100, draw=False)
+    assert front['side_l'] is None and front['side_r'] is None          # edge-on when facing us
+    prof = sketch.head(sh, (300, 250), 100, turn=1.0, draw=False)
+    assert prof['side_l'] is not None and prof['side_r'] is None        # the near side plane faces us
+    assert prof['eye_vis_l'] and not prof['eye_vis_r']
+    assert prof['ear_l'][0] < 300 + 5                                    # the ear sits behind the middle
+    assert prof['nose'][0] > prof['chin'][0] > 300                      # nose and chin stand out in front
+    # the profile eye is set back from the nose line and opens toward it: a wedge, its back corner furthest
+    shape = np.array(prof['eye_shape_l'])
+    assert prof['nose'][0] - shape[:, 0].max() > 15                    # well behind the nose line (r = 100)
+    assert shape[:, 1].max() - shape[:, 1].min() > 1.5 * np.ptp(shape[:, 0][shape[:, 0] > shape[:, 0].max() - 3])
+    # lids come back inner corner to outer, the upper above the lower, on the eye facing us
+    up, lo = np.array(front['eye_upper_r']), np.array(front['eye_lower_r'])
+    assert up[-1, 0] > up[0, 0] and up[len(up) // 2, 1] < front['eye_r'][1] < lo[len(lo) // 2, 1]
+    # the far cheek on a turned head is a curve, not a ruler line: its middle stands out past the chord
+    t3f = np.array(sketch.head(sh, (300, 250), 100, turn=0.3, draw=False)['jaw'])
+    far = t3f[(t3f[:, 0] > 300) & (t3f[:, 1] > 260) & (t3f[:, 1] < 380)]
+    a, b = far[np.argmin(far[:, 1])], far[np.argmax(far[:, 1])]
+    d = b - a
+    dev = [(d[0] * (p - a)[1] - d[1] * (p - a)[0]) / np.linalg.norm(d) for p in far]
+    assert max(abs(v) for v in dev) > 5.0        # 4.5 with the bare contour: it swells and hollows, never ruled
+    # the near jaw bows outward: on a turned head it stands well outside the straight line from corner to chin
+    t3 = sketch.head(sh, (300, 250), 100, turn=0.3, draw=False)
+    jaw = np.array(t3['jaw'])
+    low = jaw[(jaw[:, 1] > t3['ear_l'][1] + 30) & (jaw[:, 0] < t3['chin'][0])]
+    a, b = low[np.argmin(low[:, 1])], low[np.argmax(low[:, 1])]
+    d = b - a
+    bow = max((d[0] * (p - a)[1] - d[1] * (p - a)[0]) / np.linalg.norm(d) for p in low)
+    assert bow > 13                                                      # it was 11 with the ruler-straight jaw
+    # looking down bows the eye line downward in the middle (it wraps round the face)
+    down = sketch.head(sh, (300, 250), 100, nod=0.6, draw=False)['lines']['eye']
+    mid, ends = down[len(down) // 2][1], (down[0][1] + down[-1][1]) / 2
+    assert mid > ends
