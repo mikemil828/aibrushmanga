@@ -150,7 +150,7 @@ with sh.clip(PANEL):
     tone(sh, full(shine), level=0.30, lpi=LPI)
     # the collar's folds: a tone graded by the reference's own light (its rim and fold tops are lighter navy)
     jl = nd.gaussian_filter(LUM, 2.0)
-    jlv = np.clip(0.80 - (jl - 42) * 0.012, 0.50, 0.80).astype(np.float32)
+    jlv = np.clip(0.84 - (jl - 40) * 0.020, 0.40, 0.84).astype(np.float32)   # folds: stronger contrast
     tone(sh, full(jacket), level=full(np.where(jacket, jlv, 0).astype(np.float32)), lpi=LPI)
     deep = nd.binary_opening(jacket & (jl < 34), iterations=3)
     sh.fill(full(nd.gaussian_filter(deep.astype(np.float32), 1.0) > 0.5))
@@ -277,7 +277,10 @@ with sh.clip(PANEL):
     blk &= ~(MOUTHZ & ~open_m) & ~hair_edge & ~SMALL & ~open_m & ~jacket & ~nd.binary_erosion(IRIS, iterations=2)   # face.iris owns it
     tips = blk & nd.binary_dilation(hair_t, iterations=5) & ~lash_big
     # round the ears (outside the face) every black is a drawn line: hairlines, never filled blobs
-    tips |= blk & ~INNER & ~LOW & ~lash_big
+    EARS = np.zeros_like(blk)                       # the ears reach in past INNER's edge
+    for i in range(N):
+        EARS |= cellmask(i, 0.30, 0.72, 0.10, 0.33) | cellmask(i, 0.30, 0.72, 0.67, 0.90)
+    tips |= blk & (~INNER | EARS) & ~LOW & ~lash_big & ~EYEZ
     # the dark rim round an eye white, away from the lash band, is a lid line: a hairline, not a heavy ink
     whites_b = big(P['white'] & EYEZ & ~LIGHTS, 200)
     lidb = blk & nd.binary_dilation(whites_b, iterations=4) & EYEZ & ~lash_big & ~nd.binary_dilation(IRIS, iterations=2) \
@@ -336,6 +339,11 @@ with sh.clip(PANEL):
                                min_px=1.0, even=0.8, seed=9)
     with sh.clip(full(~INNER)):
         n4 = mprep.ink_outline(sh, full(hair_t), pen='g_pen', pressure=(0.35, 0.6), sigma=1.5, min_len=30, seed=10)
+    # the ears' outer edge: the figure's silhouette against the background, where it is not hair
+    figure = nd.binary_fill_holes(nd.binary_opening(~P['bg'], iterations=2))
+    figure = nd.gaussian_filter(figure.astype(np.float32), 1.0) > 0.5
+    with sh.clip(full(EARS & ~nd.binary_dilation(hair_t, iterations=1))):
+        ne = mprep.ink_outline(sh, full(figure), pen='g_pen', pressure=(0.5, 0.7), sigma=1.2, min_len=12, seed=21)
     n5 = mprep.ink_outline(sh, full(jacket), pen='g_pen', pressure=(0.4, 0.65), sigma=1.5, min_len=30, seed=11)
     sh.fill(full(nd.gaussian_filter(LIGHTS.astype(np.float32), 0.7) > 0.5), mode='white')
 
@@ -350,4 +358,4 @@ tools.keep(brows=brows, iris=IRIS, small=SMALL, lights=LIGHTS, blk=blk, tips=tip
            jacket=jacket)
 effects.border(sh, PANEL, 0.8)
 sh.png('panel.png'); sh.close()
-print('strokes', sh.stats['strokes'], 'traced', n1 + nt + n2 + n2m + nz + n3 + n4 + n5, round(time.time() - t0), 's')
+print('strokes', sh.stats['strokes'], 'traced', ne + n1 + nt + n2 + n2m + nz + n3 + n4 + n5, round(time.time() - t0), 's')

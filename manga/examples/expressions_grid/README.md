@@ -28,11 +28,10 @@ in `manga.tools`.
 
 ## Weak spots
 
-Second round (the first list is fixed: neck shadow, ear marks, flat collar, blotchy iris, long lid lines):
+Third round: the ears have an outline against the background (G-pen, clipped to the ear zones away from the
+hair), the blacks round the ears are hairlines, and the collar's folds are graded more strongly.
 
-- The ears still carry a few small dark marks where the hair's shadow meets the ear's own lines.
-- The collar's folds come from the reference's light and read softly; the inside of the collar is no longer
-  solid black.
-- The angry face's lids keep a thin line past the outer corners, as the reference has, but a little heavier.
+- Where the hair overlaps the ear there are still a few short dark strokes.
+- The collar folds follow the reference's light, so they read as soft shading rather than drawn creases.
 
 `ref.png` is not covered by the code's license: see `REF-LICENSE.txt`.
