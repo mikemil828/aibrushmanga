@@ -32,10 +32,10 @@ from manga import Sheet, tone, trace, effects, face, tools
 from manga import prep as mprep
 import prep as ref
 
-# STYLE=manga (default) draws as a manga inker does, learned from a published page: a mostly paper iris, the
+# STYLE=cel (default, Michael's choice) keeps the colour art's layers: every shade in the reference becomes tone.
+# STYLE=manga draws as a manga inker does, learned from a published page: a mostly paper iris, the
 # heaviest stroke on the upper lashes, skin left white, a white gap round the figure, one outline round it.
-# STYLE=cel keeps the colour art's layers (every shade in the reference becomes tone).
-STYLE = os.environ.get('STYLE', 'manga')
+STYLE = os.environ.get('STYLE', 'cel')
 EYES = STYLE
 
 t0 = time.time()
@@ -399,7 +399,8 @@ with sh.clip(PANEL):
     nt, _ = trace.ink_line_art(sh, full(tips), pens=('maru', 'maru'), min_len_px=8, beta_px=99, weight=0.45,
                                min_px=1.0, even=0.95, seed=14)
     # 6b. brows over the lashes: one tapered stroke each, from thick to thin, with a paper ring round it
-    with sh.clip(full(~hair_t & ~nd.binary_dilation(lash_big | blk & EYEZ, iterations=3))):   # paper ring, 4 px wider; not over the lashes
+    ring_clip = ~hair_t & ~nd.binary_dilation(lash_big | blk & EYEZ, iterations=3) if STYLE == 'manga' else ~hair_t
+    with sh.clip(full(ring_clip)):                   # paper ring: the same stroke, 4 px wider, in white
         for pts, w in BROW_STROKES:
             face.brow_ring(sh, pts + M, w)
     for pts, w in BROW_STROKES:

@@ -28,12 +28,11 @@ in `manga.tools`.
 
 ## Style
 
-`STYLE=manga` (the default) draws the way a manga inker does, learned by comparing against a published page:
+The default is the colour art's layers (`STYLE=cel`), which Michael prefers. `STYLE=manga python3 panel.py` draws the way a manga inker does, learned by comparing against a published page:
 the iris is mostly paper (`face.manga_iris`: black under the lid, a fading tone, a small pupil, sparkle dots),
 the upper lash band is the heaviest stroke on the face, the lower lid is a few dashes (`face.lid_dashes`), skin
 stays white except under the chin and where the hair casts shadow, the nose is one short stroke, and one smooth
-outline runs round the whole figure, heavier than the inner lines. `STYLE=cel python3 panel.py` keeps the
-colour art's layers, as before.
+outline runs round the whole figure, heavier than the inner lines.
 
 ## Weak spots
 
