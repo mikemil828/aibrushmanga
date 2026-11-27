@@ -148,11 +148,13 @@ for e in 'lr':
     oc = band_o[-1]
     sh.stroke([oc, (oc[0] + out_dir * 0.25 * rx, oc[1] - 0.05 * ry), (oc[0] + out_dir * 0.42 * rx, oc[1] - 0.22 * ry)],
               pen='g_pen', pressure=0.85, taper=(0.3, 1.6))
-    # crease: the upper lid lifted, over its outer two thirds; lower lid: a light stroke along its middle
+    # crease: the upper lid lifted, over its outer two thirds
     k0, k1 = int(0.3 * n), int(0.92 * n)
     sh.stroke([(x, y - 0.32 * ry) for x, y in U[k0:k1]], pen='maru', pressure=0.45)
-    k0, k1 = int(0.3 * n), int(0.8 * n)
-    sh.stroke([tuple(p) for p in Lo[k0:k1]], pen='maru', pressure=0.5, taper=(1.0, 1.0))
+    # the lower lid stroke sits under the iris (a little wider than it), wherever the iris is in the opening
+    under = [tuple(p) for p in Lo if abs(p[0] - ic[0]) < 0.95 * irx]
+    if len(under) > 1:
+        sh.stroke(under, pen='maru', pressure=0.5, taper=(1.0, 1.0))
     # brow: one thin stroke, thick at the head (toward the centre line)
     b = h['brow_' + e]
     bpts = arc((b[0], b[1] + 0.25 * R), rx * 1.25, 0.32 * R, 235 if e == 'l' else 245, 295 if e == 'l' else 305,
