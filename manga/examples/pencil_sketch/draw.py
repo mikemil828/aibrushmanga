@@ -65,13 +65,17 @@ h = sk.head(sh, C, R, turn=TURN, tilt=TILT, seed=1)
 ex, ey = h['eye_size']
 # neck and shoulders: the neck leaves the jaw under the ear and below the far cheek; shoulders a short way down
 chin = h['chin']
-NB = chin[1] + 0.62 * R                                # neck base (where the collar sits)
-neck_l, neck_r = (chin[0] - 0.55 * R, chin[1] - 0.32 * R), (chin[0] + 0.28 * R, chin[1] - 0.3 * R)
-neck_lb, neck_rb = (neck_l[0] - 0.06 * R, NB), (neck_r[0] + 0.06 * R, NB - 4)
+# Proportions: chin to the collar about 0.4 R (a sixth of the head's height); the neck leaves the jaw low,
+# about level with the mouth, and widens a little toward its base; the shoulders rise into the neck's sides
+# (the trapezius), so they meet it above the collar, not at its foot.
+NB = chin[1] + 0.4 * R                                 # neck base (where the collar sits, front)
+neck_l, neck_r = (chin[0] - 0.5 * R, chin[1] - 0.2 * R), (chin[0] + 0.3 * R, chin[1] - 0.22 * R)
+neck_lb, neck_rb = (neck_l[0] - 0.1 * R, NB), (neck_r[0] + 0.09 * R, NB - 4)
+trap_l, trap_r = lerp(neck_l, neck_lb, 0.6), lerp(neck_r, neck_rb, 0.6)
 sk.curve(sh, [neck_l, lerp(neck_l, neck_lb, 0.5), neck_lb], 0.35, 40)
 sk.curve(sh, [neck_r, lerp(neck_r, neck_rb, 0.5), neck_rb], 0.35, 41)
-SH_L = [(40, NB + 0.95 * R), (150, NB + 0.32 * R), (neck_lb[0] - 0.2 * R, NB + 0.06 * R), neck_lb]
-SH_R = [neck_rb, (neck_rb[0] + 0.25 * R, NB + 0.04 * R), (W - 130, NB + 0.36 * R), (W - 30, NB + 0.95 * R)]
+SH_L = [(40, NB + 0.9 * R), (150, NB + 0.3 * R), (trap_l[0] - 0.45 * R, NB - 0.02 * R), trap_l]
+SH_R = [trap_r, (trap_r[0] + 0.45 * R, NB - 0.03 * R), (W - 130, NB + 0.32 * R), (W - 30, NB + 0.9 * R)]
 sk.curve(sh, SH_L, 0.35, 42)
 sk.curve(sh, SH_R, 0.35, 43)
 # hair mass: the cranium plus hair thickness, and the bob's side locks down to the jaw

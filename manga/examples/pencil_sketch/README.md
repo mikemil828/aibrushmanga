@@ -27,12 +27,21 @@ nose half-way down, mouth between nose and chin). Applied here:
 - The mouth as one line with a break at its lowest point; the nose as one small stroke (a toned nose shadow
   was tried and read as a smudge).
 
+## Third round: the neck
+
+The neck read as far too long. By the numbers it was only about a quarter of the head's height; it looked
+long because its lines started up by the ears, it was narrow, and the shoulders met it at its foot, like a
+tube. Now: chin to collar 0.4 R, the neck leaves the jaw about level with the mouth and widens a little
+toward its base, and the shoulders rise into its sides (the trapezius) and meet it above the collar.
+animeoutline.com's full-body anime girl tutorial (6.5 heads tall, legs about as long as head and body) gives
+no neck or shoulder measurements.
+
 ## Weak spots (honest list)
 
 - Beyond those few shadows the face is flat; there is no form shading on cheek or jaw.
 - The clumps still all start from one parting point, so the fringe fans out more than real hair does.
 - The ring of light on the hair has a regular sawtooth edge.
-- The neck is a little long and the shoulders plain; there is no body under the collar.
+- The shoulders are plain; there is no body under the collar.
 - The far side lock bulges outward just below the crown.
 - The head construction is a simple sphere-and-jaw model: good for turns up to about three-quarter view and
   small nods, not for profiles or strong up/down views.
