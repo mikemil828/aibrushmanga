@@ -72,6 +72,9 @@ def replay(path, scale=1.0, until=None, progress=False, snap=False):
                 sh._clips.append(cm)
             elif op == 'unclip':
                 sh._clips.pop()
+            elif op == 'clear_sketch':
+                sh._n += 1
+                sh.sketch = None
             elif op == 'border':
                 sh._n += 1
                 effects._border(sh, [tuple(p) for p in d['poly']], d['width_mm'])
@@ -90,6 +93,8 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--bw', action='store_true', help='pure 1-bit black and white output')
     ap.add_argument('--until', type=int, default=None, help='stop before this journal line')
+    ap.add_argument('--sketch', choices=['on', 'only'], default=None,
+                    help='show the pencil sketch layer under the ink (on) or alone (only); never with --bw')
     ap.add_argument('--dpi', type=float, default=None,
                     help="printer resolution, e.g. 600: renders for that printer (sets the scale, tags the PNG, "
                          "snaps screens to whole pixels). Print the PNG at 100%%/actual size.")
@@ -108,7 +113,7 @@ def main():
             shrink = min(1.0, (pw - 12.7) / w_mm, (ph - 12.7) / h_mm)
         scale = a.dpi / 25.4 * shrink / d['px_per_mm']
     sh = replay(a.journal, scale, a.until, progress=True, snap=bool(a.dpi or a.bw))
-    sh.png(a.out, bw=a.bw, dpi=a.dpi)
+    sh.png(a.out, bw=a.bw, dpi=a.dpi, sketch={'on': True, 'only': 'only'}.get(a.sketch, False))
     print(f'{a.out}: {sh.W}x{sh.H}, {sh.stats["strokes"]} strokes, {time.time() - t:.0f}s')
 
 

@@ -353,3 +353,35 @@ def test_replay_for_a_printer(tmp_path):
     assert im.mode == '1' and round(im.info['dpi'][0]) == 300
     assert abs(im.width - round(30 / 25.4 * 300)) <= 1          # 30 mm wide page, fits A4, so no shrink
     assert abs((1 - np.asarray(im, np.float32)).mean() - 0.4) < 0.03
+
+
+def test_pencil_layer_never_reaches_ink_or_print(tmp_path):
+    from PIL import Image
+    from manga import replay as rp
+    j = tmp_path / 's.jsonl'
+    sh = Sheet(200, 160, px_per_mm=8.0, journal=str(j))
+    sh.pencil([(20, 20), (180, 140)], pressure=0.8)
+    sh.stroke([(20, 140), (180, 20)], pen='g_pen', pressure=0.8)
+    assert sh.sketch is not None and sh.sketch.max() > 0.2
+    plain = np.asarray(sh.image().convert('L'))
+    assert plain[40, 45] > 240                          # pencil only on that spot: not in the page image
+    shown = np.asarray(sh.image(sketch=True))
+    assert shown[40, 45, 2] > shown[40, 45, 0] + 30     # shown in blue on request
+    assert np.array_equal(np.asarray(sh.image(bw=True, sketch=True)), np.asarray(sh.image(bw=True)))
+    sh.erase([(10, 10), (60, 50)], width_mm=4)
+    assert sh.sketch[40, 45] < 0.05
+    sh.close()
+    re = rp.replay(str(j))
+    assert np.allclose(re.sketch, sh.sketch, atol=1e-5) and np.allclose(re.ink, sh.ink, atol=1e-5)
+
+
+def test_head_construction_points():
+    from manga import sketch
+    sh = Sheet(600, 600, px_per_mm=8.0)
+    front = sketch.head(sh, (300, 250), 100, draw=False)
+    assert abs(front['eye_l'][1] - front['eye_r'][1]) < 1 and front['chin'][1] > front['mouth'][1] > front['eye_l'][1]
+    assert abs(front['eye_size_l'][0] - front['eye_size_r'][0]) < 1e-6
+    turned = sketch.head(sh, (300, 250), 100, turn=0.4, draw=True)
+    assert turned['eye_size_r'][0] < turned['eye_size_l'][0]          # the far eye is the narrow one
+    assert turned['chin'][0] > front['chin'][0]                         # the face swings toward the turn
+    assert sh.sketch is not None and float(np.asarray(sh.image().convert('L')).min()) > 240

@@ -48,6 +48,9 @@ PENS = {
     'border': Pen('border', 0.8, 0.8, taper_in_mm=0.0, taper_out_mm=0.0, wobble_mm=0.0),
     # Marker for filling and heavy flat shapes.
     'marker': Pen('marker', 1.2, 1.2, taper_in_mm=0.0, taper_out_mm=0.0, wobble_mm=0.03),
+    # Pencil for the sketch layer (use with mode='sketch', or Sheet.pencil). Soft grey, grainy, never printed.
+    'pencil': Pen('pencil', 0.12, 0.32, gamma=1.0, taper_in_mm=0.6, taper_out_mm=1.2, wobble_mm=0.04,
+                  rough=0.25, ink=0.6),
     # White-out brush (use with mode='white').
     'white': Pen('white', 0.2, 1.6, gamma=1.2, taper_in_mm=0.8, taper_out_mm=1.5, wobble_mm=0.02),
 }

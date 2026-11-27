@@ -9,7 +9,7 @@ from .sheet import Sheet
 from .pens import Pen, PENS
 from .hatch import hatch
 from .tone import tone
-from . import effects, prep, geom, trace, nature, water, tools, face
+from . import effects, prep, geom, trace, nature, water, tools, face, sketch
 from .frame import Frame
 
 __all__ = ['Sheet', 'Pen', 'PENS', 'hatch', 'tone', 'effects', 'prep', 'geom', 'trace', 'nature', 'water', 'tools',
