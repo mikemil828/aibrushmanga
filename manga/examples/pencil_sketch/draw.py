@@ -86,10 +86,13 @@ for e in 'lr':
     sk.ellipse(sh, c, rx, ry, rot=TILT, passes=1, seed=50 + (e == 'r'))
     iris[e] = ((c[0] - 0.1 * rx, c[1] + 0.05 * ry), 0.62 * rx, 0.95 * ry)
     sk.ellipse(sh, iris[e][0], iris[e][1], iris[e][2], rot=TILT, pressure=0.3, passes=1, seed=52 + (e == 'r'))
-# bangs: tips along the brow line, alternating long and short, as gesture strokes from the parting
+# bangs: clumps of uneven size and length (a tutorial's advice: vary size, shape and direction), as
+# gesture strokes from the parting. Each entry: across position, length below the brow line.
+CLUMPS = [(-0.95, 0.7), (-0.72, 0.18), (-0.5, 0.42), (-0.2, 0.5), (0.04, 0.08), (0.3, 0.36), (0.52, 0.14),
+          (0.9, 0.78)]
+NOTCH = [0.42, 0.22, 0.48, 0.3, 0.4, 0.26, 0.5]         # how far each notch between two clumps rises
 tips = []
-for k, (u, drop) in enumerate([(-0.95, 0.75), (-0.62, 0.42), (-0.3, 0.62), (0.0, 0.3), (0.3, 0.55),
-                               (0.6, 0.35), (0.9, 0.8)]):
+for k, (u, drop) in enumerate(CLUMPS):
     base = h['lines']['brow']
     p = base[int(np.clip((u + 0.8) / 1.6 * (len(base) - 1), 0, len(base) - 1))]
     tip = (p[0] + u * 0.12 * R, p[1] + drop * R * 0.45 - 0.1 * R)
@@ -99,6 +102,7 @@ sk_png = os.path.join(HERE, 'sketch.png')
 sh.png(sk_png, sketch='only')
 
 # ---------------------------------------------------------------- 3. ink: eyes first
+openings, irises = {}, {}
 for e in 'lr':
     c = h['eye_' + e]
     rx, ry = h['eye_size_' + e]
@@ -108,9 +112,11 @@ for e in 'lr':
     up = arc(c, rx * 1.02, ry * 1.0, 190, 350, 20, TILT)
     lo = arc((c[0], c[1] - 0.15 * ry), rx * 0.92, ry * 0.9, 25, 155, 16, TILT)
     opening = poly_mask(up + lo)
+    openings[e] = opening
     # iris clipped to the opening, black under the lid, tone fading down, pupil and two catch-lights
     ic, irx, iry = iris[e]
     iris_m = poly_mask(arc(ic, irx, iry, 0, 360, 40, TILT)) & opening
+    irises[e] = iris_m
     pupil_m = poly_mask(arc((ic[0], ic[1] + 0.05 * iry), 0.3 * irx, 0.42 * iry, 0, 360, 24, TILT))
     lights = (poly_mask(arc((ic[0] - 0.32 * irx, ic[1] - 0.3 * iry), 0.26 * irx, 0.2 * iry, 0, 360, 20)) |
               poly_mask(arc((ic[0] + 0.35 * irx, ic[1] + 0.38 * iry), 0.1 * irx, 0.08 * iry, 0, 360, 12)))
@@ -148,8 +154,11 @@ n = h['nose']
 sh.stroke([(n[0] + 0.05 * R, n[1] - 0.06 * R), (n[0] + 0.09 * R, n[1] + 0.02 * R), (n[0] + 0.03 * R, n[1] + 0.04 * R)],
           pen='maru', pressure=0.55, taper=(0.6, 0.4))
 m = h['mouth']
-sh.stroke([(m[0] - 0.2 * R, m[1] - 0.05 * R), (m[0] - 0.03 * R, m[1] + 0.035 * R), (m[0] + 0.14 * R, m[1] - 0.03 * R)],
-          pen='maru', pressure=0.7, taper=(0.6, 0.6))
+# the mouth as one line with a break at its lowest point
+sh.stroke([(m[0] - 0.2 * R, m[1] - 0.05 * R), (m[0] - 0.1 * R, m[1] + 0.01 * R), (m[0] - 0.035 * R, m[1] + 0.03 * R)],
+          pen='maru', pressure=0.7, taper=(0.6, 0.3))
+sh.stroke([(m[0] + 0.01 * R, m[1] + 0.03 * R), (m[0] + 0.08 * R, m[1] + 0.005 * R), (m[0] + 0.14 * R, m[1] - 0.03 * R)],
+          pen='maru', pressure=0.65, taper=(0.3, 0.6))
 sh.stroke([(m[0] - 0.04 * R, m[1] + 0.11 * R), (m[0] + 0.03 * R, m[1] + 0.11 * R)], pen='maru', pressure=0.35)
 if h['ear_l'] is not None:
     el = h['ear_l']
@@ -174,8 +183,8 @@ low_l, low_r = out_l[-1], out_r[-1]
 # bangs edge: tips with notches between them pulled up toward the parting
 edge = [tips[0]]
 valleys = []
-for a, b in zip(tips, tips[1:]):
-    v = lerp(lerp(a, b, 0.5), part, 0.38)
+for (a, b), f in zip(zip(tips, tips[1:]), NOTCH):
+    v = lerp(lerp(a, b, 0.5), part, f)
     valleys.append(v)
     edge += [v, b]
 hair_poly = out_l[::-1] + crown + out_r + in_r[::-1] + edge[::-1] + in_l
@@ -194,10 +203,22 @@ sh.fill(poly_mask(ring) & hair_m, mode='white')
 sh.stroke(out_l[::-1] + crown[1:-1] + out_r, pen='g_pen', pressure=0.8, taper=(2.5, 2.5))
 sh.stroke([tips[0]] + in_l, pen='g_pen', pressure=0.6, taper=(2.0, 1.5))
 sh.stroke([tips[-1]] + in_r, pen='g_pen', pressure=0.6, taper=(2.0, 1.5))
+def bowed(a, b, amt):
+    """Midpoint of a-b pushed sideways by amt (in R), so a lock's edge curves instead of running straight."""
+    m = lerp(a, b, 0.5); d = np.subtract(b, a); n = np.array([d[1], -d[0]]) / max(np.hypot(*d), 1e-6)
+    return (m[0] + n[0] * amt * R, m[1] + n[1] * amt * R)
 for k, t in enumerate(tips):
+    sweep = -0.05 if t[0] < part[0] else 0.05                # locks fall away from the parting
     for v in ([valleys[k - 1]] if k > 0 else []) + ([valleys[k]] if k < len(valleys) else []):
-        bow = lerp(lerp(v, t, 0.5), part, -0.04)
-        sh.stroke([lerp(v, part, 0.3), v, bow, t], pen='g_pen', pressure=0.5, taper=(2.0, 3.0))
+        sh.stroke([lerp(v, part, 0.3), v, bowed(v, t, sweep), t], pen='g_pen', pressure=0.5, taper=(2.0, 3.0))
+# split lines inside the two widest clumps, and two loose strands at the temples
+for k in (2, 3, 5):
+    a = lerp(valleys[k - 1], valleys[k], 0.5)
+    b = lerp(a, tips[k], 0.6)
+    sh.stroke([lerp(a, part, 0.2), a, bowed(a, b, -0.03 if tips[k][0] < part[0] else 0.03), b], pen='maru',
+              pressure=0.45, taper=(2.0, 2.5))
+for a, b, c in ((Lp(-0.62, -0.25), Lp(-0.72, 0.2), Lp(-0.6, 0.55)), (Lp(0.8, -0.2), Lp(0.88, 0.25), Lp(0.8, 0.5))):
+    sh.stroke([a, b, c], pen='maru', pressure=0.5, taper=(2.0, 3.0))
 # a few flow strands from the parting, curving with the skull, stopping short of the edge
 for k, a in enumerate([168, 186, 204, 334, 352, 370]):
     end = arc(HC, HR * 0.9, HR * 0.92, a, a, 1)[0]
@@ -208,6 +229,23 @@ for p, q in ((in_l, out_l), (in_r, out_r)):
         a, b = lerp(p[0], q[1], t), lerp(p[-1], q[-1], t)
         sh.stroke([a, lerp(a, b, 0.5), b], pen='maru', pressure=0.38, taper=(3.0, 3.0))
 
+# ---------------------------------------------------------------- 5b. cast shadows (light from the upper left)
+# Skin otherwise stays paper. Shadows: the fringe on the forehead, the lids on the eyes, the head on the
+# neck (below).
+face_m = poly_mask(jaw + arc(C, R, R, -15, -165, 30, TILT))
+skin = face_m & ~hair_m & ~openings['l'] & ~openings['r']
+dy, dx = int(0.1 * R), int(0.035 * R)
+fringe_shadow = np.zeros_like(hair_m)
+fringe_shadow[dy:, dx:] = hair_m[:-dy, :-dx]
+fringe_shadow &= skin & (np.arange(H)[:, None] < h['eye_l'][1] + 0.1 * R)
+tone(sh, fringe_shadow, level=0.13, lpi=60)     # lighter than the hair, so it reads as skin in shade
+for e in 'lr':
+    op = openings[e]
+    ys = np.nonzero(op.any(axis=1))[0]
+    lid = op & ~irises[e] & (np.arange(H)[:, None] < ys.min() + 0.32 * (ys.max() - ys.min()))
+    tone(sh, lid, level=0.26, lpi=60)
+# (a toned nose shadow was tried and read as a smudge at this size: the nose stays one small stroke)
+
 # ---------------------------------------------------------------- 6. neck, shoulders, sailor collar
 sh.stroke([neck_l, lerp(neck_l, neck_lb, 0.5), neck_lb], pen='g_pen', pressure=0.6, taper=(2.0, 0.5))
 sh.stroke([neck_r, lerp(neck_r, neck_rb, 0.5), neck_rb], pen='g_pen', pressure=0.55, taper=(2.0, 0.5))
@@ -217,7 +255,7 @@ low = max(p[1] for p in under) + 0.12 * R
 shadow = poly_mask(under + [(p[0], max(p[1] + 0.1 * R, low - 0.06 * R * (1 - np.sin(np.pi * i / max(len(under) - 1, 1)))))
                             for i, p in enumerate(under)][::-1])
 neck_m = poly_mask([neck_l, neck_lb, neck_rb, neck_r, chin])
-tone(sh, shadow & neck_m, level=0.34, lpi=60)
+tone(sh, shadow & neck_m, level=0.38, lpi=60)
 # sailor collar: two lapels from the neck to a V on the chest, a stripe inside each, and a small knot
 V = (chin[0] - 0.05 * R, NB + 0.85 * R)
 lap_l = [neck_lb, (neck_lb[0] - 0.42 * R, NB + 0.12 * R), (V[0] - 0.42 * R, V[1] + 0.05 * R), V]

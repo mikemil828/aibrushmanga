@@ -14,12 +14,25 @@ The plan is at the top of `draw.py`. Every inked feature is placed from the poin
 (eyes, brows, nose, mouth, chin, jaw, ear) or from points named in head units (`Lp(u, v)`), so moving the
 head or changing its turn moves the whole drawing with it.
 
+## Second round: lessons from a face tutorial
+
+From animeoutline.com's anime girl head tutorial (read, not copied): its construction matches `sketch.head`
+(circle, jaw lines to a small pointed chin, ears between the head's middle and the half-way point to the chin,
+nose half-way down, mouth between nose and chin). Applied here:
+
+- Hair as clumps of uneven width and length, notches of uneven depth, locks curving away from the parting,
+  split lines in the widest clumps and two loose strands at the temples.
+- Cast shadows, light from the upper left: the fringe on the forehead (a lighter tone than the hair, so it
+  reads as skin in shade), the upper lids on the eyes, the head on the neck. Skin is otherwise paper.
+- The mouth as one line with a break at its lowest point; the nose as one small stroke (a toned nose shadow
+  was tried and read as a smudge).
+
 ## Weak spots (honest list)
 
-- The face has no shading beyond the shadow under the chin; it reads flat next to the hair.
-- The bangs are evenly spaced, stiff locks drawn from one parting; real bangs overlap and vary in width.
+- Beyond those few shadows the face is flat; there is no form shading on cheek or jaw.
+- The clumps still all start from one parting point, so the fringe fans out more than real hair does.
 - The ring of light on the hair has a regular sawtooth edge.
 - The neck is a little long and the shoulders plain; there is no body under the collar.
 - The far side lock bulges outward just below the crown.
-- The head construction is a simple sphere-and-jaw model: it is good for turns up to about three-quarter
-  view and small nods, not for profiles or strong up/down views.
+- The head construction is a simple sphere-and-jaw model: good for turns up to about three-quarter view and
+  small nods, not for profiles or strong up/down views.
