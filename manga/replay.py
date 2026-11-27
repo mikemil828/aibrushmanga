@@ -32,7 +32,7 @@ def _mask(jdir, m):
 PAPERS = {'letter': (215.9, 279.4), 'a4': (210.0, 297.0), 'b4': (257.0, 364.0), 'legal': (215.9, 355.6)}
 
 
-def replay(path, scale=1.0, until=None, progress=False, snap=False):
+def replay(path, scale=1.0, until=None, progress=False, snap=False, on_op=None):
     jdir = path + '.d'
     sh = None
     clips = []
@@ -78,6 +78,8 @@ def replay(path, scale=1.0, until=None, progress=False, snap=False):
             elif op == 'caption':
                 effects.caption(sh, tuple(d['xy']), d['text'], d['size_mm'], d['pad_mm'], d['box'], d['bold'],
                                 d.get('face'))
+            if on_op is not None and sh is not None:
+                on_op(i, op, sh)                        # after each journal line: frames for an animation
             if progress and i % 2000 == 0:
                 print(f'  line {i}  {time.time() - t0:.0f}s', flush=True)
     return sh

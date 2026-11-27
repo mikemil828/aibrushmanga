@@ -353,3 +353,24 @@ def test_replay_for_a_printer(tmp_path):
     assert im.mode == '1' and round(im.info['dpi'][0]) == 300
     assert abs(im.width - round(30 / 25.4 * 300)) <= 1          # 30 mm wide page, fits A4, so no shrink
     assert abs((1 - np.asarray(im, np.float32)).mean() - 0.4) < 0.03
+
+
+@pytest.mark.skipif(__import__('shutil').which('ffmpeg') is None, reason='needs ffmpeg')
+def test_animate_a_journal(tmp_path):
+    import subprocess
+    from manga.animate import animate, pick
+    j = tmp_path / 'p.jsonl'
+    sh = Sheet(160, 120, px_per_mm=8.0, journal=str(j))
+    for k in range(12):
+        sh.stroke([(10, 10 + 8 * k), (150, 10 + 8 * k)], pen='maru')
+    sh.close()
+    out = tmp_path / 'd.mp4'
+    animate(str(j), str(out), seconds=1, fps=10, width=80, hold=0.5, progress=False)
+    n = subprocess.run(['ffprobe', '-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries',
+                        'stream=nb_read_frames', '-of', 'csv=p=0', str(out)], capture_output=True, text=True)
+    assert int(n.stdout.strip()) == 15                          # 10 drawing frames + 5 held
+    # pacing: one big change early, many small ones later; the big one must not take all the screen time
+    smalls = [np.zeros((4, 4))] + [np.full((4, 4), 100.0 + k) for k in range(10)]
+    frames = pick(np.arange(11.0), smalls, 11, even=0.5)
+    assert frames == sorted(frames) and frames[0] == 0 and frames[-1] == 10
+    assert len(set(frames)) > 6
