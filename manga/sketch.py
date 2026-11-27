@@ -51,76 +51,202 @@ def curve(sh, pts, pressure=0.45, seed=None):
     sh.pencil([tuple(p) for p in pts], pressure=pressure, seed=seed)
 
 
+# Loomis construction in head units (cranium radius = 1; x to the head's own left as we see it facing us,
+# y down, z toward the viewer). The ball is sliced flat on both sides at |x| = SIDE: the side plane, a disc of
+# radius sqrt(1 - SIDE^2). Its centre is where the brow line crosses it, the ear sits just behind its vertical
+# line between the brow and nose lines, and the jaw drops from below it to the chin.
+SIDE = 0.82
+# profile of the face down its centre line: depth (z) at each height (y)
+PROFILE = ([-1.0, HEAD['hairline'], HEAD['brow'], HEAD['eye'], 0.66, HEAD['nose'], 0.9, HEAD['mouth'], 1.28,
+            1.42, HEAD['chin']],
+           [0.0, 0.91, 0.99, 0.94, 0.99, 1.04, 0.93, 0.92, 0.85, 0.86, 0.76])
+# cheek down the front edge of the side plane to the jaw corner (below the plane's vertical line), then to the chin
+CHEEK = [(0.82, HEAD['brow'], 0.55), (0.81, 0.45, 0.42), (0.76, 0.8, 0.22), (0.69, 1.02, 0.02)]
+JAW = [(0.69, 1.02, 0.02), (0.58, 1.17, 0.28), (0.36, 1.36, 0.52), (0.14, 1.48, 0.7), (0.0, HEAD['chin'], 0.76)]
+RAMUS = (0.8, 0.8, -0.1)          # the back of the jaw rises from its corner to just under the ear
+FACE_CURVE = 0.9     # how fast the front of the face falls back toward the sides: z = profile - FACE_CURVE * x^2
+
+
+def _face_z(x, y):
+    return np.interp(y, *PROFILE) - FACE_CURVE * x * x
+
+
+def _upper_envelope(x, y):
+    """y raised to its concave upper hull over x (x need not be sorted); the order of the points is kept."""
+    order = np.argsort(x)
+    hull = []
+    for i in order:
+        while len(hull) >= 2:
+            (x1, y1), (x2, y2) = (x[hull[-2]], y[hull[-2]]), (x[hull[-1]], y[hull[-1]])
+            if (x2 - x1) * (y[i] - y1) - (y2 - y1) * (x[i] - x1) >= 0:
+                hull.pop()
+            else:
+                break
+        hull.append(i)
+    hx, hy = x[hull], y[hull]
+    return np.maximum(y, np.interp(x, hx, hy))
+
+
+def _resample(pts, n):
+    pts = np.asarray(pts, float)
+    d = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
+    t = np.linspace(0, d[-1], n)
+    return np.stack([np.interp(t, d, pts[:, k]) for k in range(pts.shape[1])], 1)
+
+
 def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=None):
-    """Construct a manga head: cranium circle, jaw to chin, centre line and feature lines.
+    """Construct a manga head the Loomis way: a ball for the cranium, sliced flat at the sides (the side
+    planes), a centre line and a brow line wrapped round it, the jaw hung from below the side plane to the
+    chin, and feature lines across the face. It is built in 3D and turned, so it holds from facing us to a
+    full profile and when the head looks up or down.
 
     c, r  -- cranium centre and radius (base px). The chin lands about 1.5 r below the centre.
-    turn  -- -1..1, how far the face turns to the viewer's right (0 = facing us, 0.5 = three-quarter).
+    turn  -- -1..1, how far the face turns to the viewer's right: sin of the angle (0 = facing us,
+             0.5 = 30 degrees, 0.71 = a true three-quarter, 1 = profile facing right).
     tilt  -- degrees the head leans (positive = clockwise on the page).
-    nod   -- -1..1, positive looks down: feature lines bow downward, as they wrap round the face.
+    nod   -- -1..1, positive looks down (up to 30 degrees): feature lines bow downward round the face.
 
     Returns a dict of constructed points for inking: 'eye_l', 'eye_r' (centres, viewer's left/right),
-    'eye_size' (rx, ry) facing us and 'eye_size_l', 'eye_size_r' narrowed by the turn, 'brow_l', 'brow_r',
-    'nose', 'mouth', 'chin', 'jaw' (polyline ear to chin to ear, hidden parts left out), 'ear_l', 'ear_r' (None when hidden), 'centre' (centre line polyline),
-    'hairline', 'cranium' (c, r) and 'far' (+1 when the far side is the viewer's right).
+    'eye_size' (rx, ry) facing us and 'eye_size_l', 'eye_size_r' foreshortened by the turn, 'eye_vis_l',
+    'eye_vis_r', 'brow_l', 'brow_r', 'nose', 'mouth', 'chin', 'jaw' (the face outline, viewer's left side
+    top to chin, then the right side back up; on the far side it follows the profile of brow, nose, mouth and
+    chin wherever that stands out past the cheek), 'ear_l', 'ear_r' (centres, None when hidden), 'ear_shape_l',
+    'ear_shape_r' (outlines), 'side_l', 'side_r' (side-plane discs, None when facing away), 'centre' (centre
+    line polyline), 'profile' (the centre line below the brow), 'hairline', 'cranium' (c, r), 'far' (+1 when
+    the far side is the viewer's right) and 'lines' (brow, eye, nose and mouth lines across the face).
     """
     c = np.asarray(c, float)
-    yaw = np.arcsin(np.clip(turn, -0.95, 0.95))
-    ct, st = np.cos(np.deg2rad(tilt)), np.sin(np.deg2rad(tilt))
+    yaw = np.arcsin(np.clip(turn, -1.0, 1.0))
+    pitch = np.deg2rad(30.0) * float(np.clip(nod, -1, 1))
+    roll = np.deg2rad(tilt)
+    cy, sy, cp, sp, cr, sr = np.cos(yaw), np.sin(yaw), np.cos(pitch), np.sin(pitch), np.cos(roll), np.sin(roll)
+    # the head turns about the neck, not the cranium centre: pivot a little below and behind it
+    pivot = np.array([0.0, 0.5, -0.1])
 
-    def P(u, v, depth=1.0):
-        """Point on the face: u across (-1 = viewer's left edge of the front), v down in radii."""
-        phi = np.arcsin(np.clip(u, -1, 1)) + yaw
-        x = r * depth * np.sin(phi)
-        y = r * v + nod * 0.22 * r * np.cos(phi) * (v > -0.5)
-        return c + np.array([ct * x - st * y, st * x + ct * y]), np.cos(phi) > 0.05
+    def rot(v):
+        v = np.asarray(v, float)
+        x, y, z = v[..., 0], v[..., 1], v[..., 2]
+        x, z = cy * x + sy * z, -sy * x + cy * z                  # turn
+        y, z = cp * y + sp * z, -sp * y + cp * z                  # nod (positive: chin toward the chest)
+        return np.stack([x, y, z], -1)
 
-    def across(v, half=0.85, depth=1.0, n=17):
-        pts = [P(u, v, depth) for u in np.linspace(-half, half, n)]
+    def proj(v):
+        v = rot(np.asarray(v, float) - pivot) + rot(pivot) * 0 + pivot
+        x, y = v[..., 0] * r, v[..., 1] * r
+        return np.stack([c[0] + cr * x - sr * y, c[1] + sr * x + cr * y], -1), v[..., 2]
+
+    def facing(n):
+        return rot(n)[..., 2]
+
+    def P(x, y):
+        """Point on the front of the face, its screen position and whether it faces us."""
+        z = _face_z(x, y)
+        n = np.array([2 * FACE_CURVE * x, 0.0, 1.0])
+        p, _ = proj([x, y, z])
+        return p, facing(n / np.linalg.norm(n)) > 0.05
+
+    def across(y, half, n=17):
+        pts = [P(x, y) for x in np.linspace(-half, half, n)]
         return [tuple(p) for p, vis in pts if vis]
 
-    # jaw: the face narrows from the cranium's width to a pointed chin
-    jaw_v = np.linspace(HEAD['eye'] - 0.1, HEAD['chin'], 14)
-    jaw_w = np.interp(jaw_v, [HEAD['eye'] - 0.1, 0.75, 1.15, HEAD['chin']], [0.93, 0.86, 0.6, 0.0])
-    left = [P(-w, v) for w, v in zip(jaw_w, jaw_v)]
-    right = [P(w, v) for w, v in zip(jaw_w, jaw_v)]
-    jaw = [tuple(p) for p, vis in left if vis] + [tuple(p) for p, vis in right[::-1] if vis]
-    # centre line: an arc over the cranium (a meridian), then down the front of the face to the chin
-    centre = []
-    for v in np.linspace(-0.97, HEAD['chin'], 18):
-        depth = np.sqrt(max(1 - v * v, 0.0)) if v < 0.3 else np.interp(v, [0.3, HEAD['chin']], [0.954, 0.85])
-        centre.append(tuple(P(0, v, depth)[0]))
-    eye_dx = 0.42
-    eye_l, vis_l = P(-eye_dx, HEAD['eye'])
-    eye_r, vis_r = P(eye_dx, HEAD['eye'])
-    ear_l, ear_lv = P(-1.0, (HEAD['brow'] + HEAD['nose']) / 2, depth=0.98)
-    ear_r, ear_rv = P(1.0, (HEAD['brow'] + HEAD['nose']) / 2, depth=0.98)
-    out = {
-        'cranium': (tuple(c), r), 'centre': centre, 'jaw': jaw,
-        'eye_l': tuple(eye_l), 'eye_r': tuple(eye_r),
-        'eye_size': (0.28 * r, 0.23 * r),
-        # each eye narrowed by how far it has turned away (the far eye is the narrow one)
-        'eye_size_l': (0.28 * r * max(np.cos(np.arcsin(-eye_dx) + yaw), 0.2) / np.cos(np.arcsin(eye_dx)), 0.23 * r),
-        'eye_size_r': (0.28 * r * max(np.cos(np.arcsin(eye_dx) + yaw), 0.2) / np.cos(np.arcsin(eye_dx)), 0.23 * r),
-        'brow_l': tuple(P(-eye_dx, HEAD['brow'])[0]), 'brow_r': tuple(P(eye_dx, HEAD['brow'])[0]),
-        'nose': tuple(P(0, HEAD['nose'])[0]), 'mouth': tuple(P(0, HEAD['mouth'])[0]),
-        'chin': tuple(P(0, HEAD['chin'])[0]), 'hairline': across(HEAD['hairline'], 0.7),
-        'ear_l': tuple(ear_l) if ear_lv else None, 'ear_r': tuple(ear_r) if ear_rv else None,
-        'far': 1 if turn > 0 else -1,
-        'lines': {k: across(HEAD[k], 0.8 if k in ('brow', 'eye') else 0.45) for k in ('brow', 'eye', 'nose', 'mouth')},
-    }
+    out = {'cranium': (tuple(c), r), 'far': 1 if turn > 0 else -1}
+    # centre line: a meridian over the ball, then down the profile to the chin
+    ys = np.linspace(-0.97, HEAD['chin'], 26)
+    cen3 = np.stack([np.zeros_like(ys), ys,
+                     np.where(ys < HEAD['hairline'], np.sqrt(np.clip(1 - ys * ys, 0, 1)), np.interp(ys, *PROFILE))], 1)
+    cen2, _ = proj(cen3)
+    cen_vis = facing(np.array([0.0, 0.0, 1.0])) > -0.25        # the centre line shows until the head turns away
+    out['centre'] = [tuple(p) for p in cen2]
+    out['profile'] = [tuple(p) for p, y in zip(cen2, ys) if y >= HEAD['brow']]
+    # side planes and ears
+    rad = np.sqrt(1 - SIDE * SIDE)
+    th = np.linspace(0, 2 * np.pi, 41)
+    for e, sx in (('l', -1), ('r', 1)):
+        n_side = np.array([sx, 0.0, 0.0])
+        vis = facing(n_side) > 0.02
+        disc = np.stack([np.full_like(th, sx * SIDE), rad * np.sin(th), rad * np.cos(th)], 1)
+        out['side_' + e] = [tuple(p) for p in proj(disc)[0]] if vis else None
+        # the ear: just behind the plane's vertical line, brow line to nose line, its back edge flared out
+        ec = np.array([sx * (SIDE + 0.02), (HEAD['brow'] + HEAD['nose']) / 2, -0.17])
+        hdir = np.array([sx * np.sin(np.deg2rad(25)), 0.0, -np.cos(np.deg2rad(25))])
+        a, b = 0.2, (HEAD['nose'] - HEAD['brow']) / 2
+        t = np.linspace(0, 2 * np.pi, 33)
+        # a little egg: wider at the top
+        shape = ec + np.outer(a * np.cos(t) * (1 - 0.25 * np.sin(t)), hdir) + np.outer(b * np.sin(t), [0, 1, 0])
+        ear_vis = facing(n_side) > -0.35
+        out['ear_' + e] = tuple(proj(ec)[0]) if ear_vis else None
+        out['ear_shape_' + e] = [tuple(p) for p in proj(shape)[0]] if ear_vis else None
+    # eyes: on the face surface, foreshortened by how far the surface has turned from us
+    eye_dx, ex, ey = 0.42, 0.28, 0.23
+    out['eye_size'] = (ex * r, ey * r)
+    for e, sx in (('l', -1), ('r', 1)):
+        x = sx * eye_dx
+        p, vis = P(x, HEAD['eye'])
+        tan = np.array([1.0, 0.0, -2 * FACE_CURVE * x])
+        tan /= np.linalg.norm(tan)
+        shrink = np.linalg.norm(rot(tan)[:2])
+        out['eye_' + e] = tuple(p)
+        out['eye_vis_' + e] = bool(vis)
+        out['eye_size_' + e] = (ex * r * max(shrink, 0.15), ey * r * max(abs(cp), 0.5))
+        out['brow_' + e] = tuple(P(x, HEAD['brow'])[0])
+    for k in ('nose', 'mouth', 'chin'):
+        out[k] = tuple(P(0.0, HEAD[k])[0])
+    out['hairline'] = across(HEAD['hairline'], 0.62)
+    out['lines'] = {k: across(HEAD[k], 0.78 if k in ('brow', 'eye') else 0.42) for k in ('brow', 'eye', 'nose', 'mouth')}
+    # face outline. Each side: cheek then jaw, seen where its surface faces us; on the side turned away, the
+    # silhouette is whichever stands further out, that cheek or the profile down the centre line.
+    contour = _resample(CHEEK + JAW[1:], 30)
+    sides = {}
+    for e, sx in (('l', -1), ('r', 1)):
+        if facing(np.array([sx, 0.0, 0.0])) > 0.12:
+            # this side plane faces us, so its cheek is inside the face: the outline there is the jaw, from
+            # its corner up toward the ear (the ramus, which the ear and hair cover) and down to the chin
+            pts3 = _resample([RAMUS] + JAW, 30)
+        else:
+            pts3 = contour
+        sides[e] = proj(pts3 * np.array([sx, 1, 1]))[0]
+    def prof_for(pts3):
+        return proj(np.stack([np.zeros(len(pts3)), pts3[:, 1], np.interp(pts3[:, 1], *PROFILE)], 1))[0]
+    prof2 = prof_for(contour)
+    # which way is "out" on the screen for the far side: from the face centre toward that side
+    right = np.array([cr, sr])
+    far = 'r' if turn > 0 else 'l'
+    s_out = 1.0 if far == 'r' else -1.0
+    if abs(turn) > 1e-6:
+        # on the side turned away the jaw corner drops behind the cheek: the silhouette is the outer envelope
+        down = np.array([-sr, cr])
+        rel = sides[far] - c
+        dn, ou = rel @ down, rel @ right * s_out
+        ou = _upper_envelope(dn, ou)
+        cheek = c + np.outer(dn, down) + np.outer(ou * s_out, right)
+        use_prof = (prof2 - cheek) @ right * s_out > 0
+        sides[far] = np.where(use_prof[:, None], prof2, cheek)
+    out['jaw'] = [tuple(p) for p in sides['l']] + [tuple(p) for p in sides['r'][::-1]]
     if draw:
         rng = _rng(sh, seed)
-        ellipse(sh, c, r, pressure=pressure, seed=int(rng.integers(1 << 30)))
-        curve(sh, jaw, pressure=pressure, seed=int(rng.integers(1 << 30)))
-        curve(sh, centre, pressure=pressure * 0.7, seed=int(rng.integers(1 << 30)))
+        s = lambda: int(rng.integers(1 << 30))
+        ellipse(sh, c + (proj([0, 0, 0])[0] - c), r, pressure=pressure, seed=s())
+        for e in 'lr':
+            if out['side_' + e] is not None:
+                curve(sh, out['side_' + e], pressure=pressure * 0.8, seed=s())
+                # the side plane's cross: vertical line down to the jaw corner, horizontal along the brow line
+                sx = -1 if e == 'l' else 1
+                curve(sh, [tuple(proj([sx * SIDE, y, 0.0])[0]) for y in np.linspace(-rad, 1.02, 8)],
+                      pressure=pressure * 0.6, seed=s())
+            if out['ear_shape_' + e] is not None:
+                curve(sh, out['ear_shape_' + e], pressure=pressure * 0.8, seed=s())
+        curve(sh, out['jaw'], pressure=pressure, seed=s())
+        if cen_vis:
+            curve(sh, out['centre'], pressure=pressure * 0.7, seed=s())
+        # brow line all the way round the ball, front part only
+        bl = [proj([np.sin(a), HEAD['brow'], np.cos(a)]) for a in np.linspace(-np.pi / 2, np.pi / 2, 25)]
+        bl = [tuple(p) for (p, _), a in zip(bl, np.linspace(-np.pi / 2, np.pi / 2, 25))
+              if facing(np.array([np.sin(a), 0, np.cos(a)])) > 0]
+        if len(bl) > 1:
+            curve(sh, bl, pressure=pressure * 0.6, seed=s())
         for k, pts in out['lines'].items():
-            if len(pts) > 1:
-                curve(sh, pts, pressure=pressure * 0.6, seed=int(rng.integers(1 << 30)))
-        for e in (out['ear_l'], out['ear_r']):
-            if e is not None:
-                ellipse(sh, e, 0.12 * r, 0.24 * r, rot=tilt, pressure=pressure * 0.8, passes=1,
-                        seed=int(rng.integers(1 << 30)))
+            if k != 'brow' and len(pts) > 1:
+                curve(sh, pts, pressure=pressure * 0.6, seed=s())
     return out
 
 

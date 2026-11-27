@@ -36,6 +36,22 @@ toward its base, and the shoulders rise into its sides (the trapezius) and meet 
 animeoutline.com's full-body anime girl tutorial (6.5 heads tall, legs about as long as head and body) gives
 no neck or shoulder measurements.
 
+## Fourth round: Loomis side planes
+
+`sketch.head` is now built in 3D the Loomis way and then turned: the cranium ball is sliced flat on both sides
+(the side planes, at 0.82 of the radius), the ear sits just behind the side plane's vertical line between the
+brow and nose lines, and the jaw hangs from below the side plane to the chin. The face has a depth profile down
+its centre line (brow, a small nose, lips, chin), so a turned head shows it on the far side. On the side
+turned away, the outline is the outer envelope of cheek, jaw and profile; on the side that turns toward us,
+the cheek moves inside the face and the outline becomes the jaw from under the ear. `turn` now reaches a
+full profile (1.0), and `nod` tips the whole head up to 30 degrees, so the feature lines wrap round it.
+`turnaround.py` draws ten poses (facing, 30 degrees, three-quarter, near profile, profile, looking down and up,
+leaning) into `turnaround.png`. thedrawingcodex.com's Loomis manga page (read, not copied) gave the method
+but no measurements; the numbers are mine.
+
+On this page the turn reads more clearly: the far eye is narrower and closer to the far cheek, the far cheek
+slopes in, and the near jaw runs from under the ear to the chin.
+
 ## Weak spots (honest list)
 
 - Beyond those few shadows the face is flat; there is no form shading on cheek or jaw.
@@ -43,5 +59,7 @@ no neck or shoulder measurements.
 - The ring of light on the hair has a regular sawtooth edge.
 - The shoulders are plain; there is no body under the collar.
 - The far side lock bulges outward just below the crown.
-- The head construction is a simple sphere-and-jaw model: good for turns up to about three-quarter view and
-  small nods, not for profiles or strong up/down views.
+- The construction's eye in profile sits close to the profile line and is still an ellipse; a manga profile
+  eye is a narrow wedge set further back.
+- The near jaw line is nearly straight from the ear to the chin; manga jaws curve a little more.
+- No hairline or neck in the construction itself; the neck is still placed by the example.

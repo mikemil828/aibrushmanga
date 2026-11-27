@@ -385,3 +385,19 @@ def test_head_construction_points():
     assert turned['eye_size_r'][0] < turned['eye_size_l'][0]          # the far eye is the narrow one
     assert turned['chin'][0] > front['chin'][0]                         # the face swings toward the turn
     assert sh.sketch is not None and float(np.asarray(sh.image().convert('L')).min()) > 240
+
+
+def test_head_side_planes_and_profile():
+    from manga import sketch
+    sh = Sheet(600, 600, px_per_mm=8.0)
+    front = sketch.head(sh, (300, 250), 100, draw=False)
+    assert front['side_l'] is None and front['side_r'] is None          # edge-on when facing us
+    prof = sketch.head(sh, (300, 250), 100, turn=1.0, draw=False)
+    assert prof['side_l'] is not None and prof['side_r'] is None        # the near side plane faces us
+    assert prof['eye_vis_l'] and not prof['eye_vis_r']
+    assert prof['ear_l'][0] < 300 + 5                                    # the ear sits behind the middle
+    assert prof['nose'][0] > prof['chin'][0] > 300                      # nose and chin stand out in front
+    # looking down bows the eye line downward in the middle (it wraps round the face)
+    down = sketch.head(sh, (300, 250), 100, nod=0.6, draw=False)['lines']['eye']
+    mid, ends = down[len(down) // 2][1], (down[0][1] + down[-1][1]) / 2
+    assert mid > ends
