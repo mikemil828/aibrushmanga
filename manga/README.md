@@ -69,6 +69,50 @@ passed in a call (`hatch(..., spacing_mm=0.7)`) always wins. Journals store the 
 `manga.replay` redraws an old page exactly, whatever your settings are now. A misspelt name prints a warning.
 `[tone] soft_mm` applies to every tone; for soft shadows only, pass `soft_mm=` in the shadow's own `tone()` call.
 
+## Humanize: a hand draws the lines
+
+Engine strokes are exact: each goes through its points as a perfect curve. `manga/humanize` (ported from the oil
+engine's hand module, `движок/рука`) gives every ink line to a simulated hand instead. A stroke becomes a chain of
+ballistic throws toward a few targets, swung around a wrist pivot. The line comes out with a slight arc, falls a
+little short or overshoots, cuts a corner when the hand is fluent, and its pressure rocks (a pull toward you is
+heavier). The hand warms up, tires, gets careful after a miss, and lays each line against the lines already
+there, so hatching and outlines drawn in pieces drift together instead of apart.
+
+It is **off by default**, and when it's off every page is byte for byte what it was. There are two ways to use it:
+
+```python
+sh.humanize()                                   # live: this sheet's strokes from here on (strength 0.15)
+sh.humanize(strength=0.1, parts={'eyes': 0.1})  # per-sheet overrides
+```
+
+```
+python -m manga.humanize page.jsonl hand.jsonl [--strength 0.15] [--person 2] [--part eyes=0.1] [--pen maru=0.5]
+python -m manga.replay hand.jsonl --out page.png
+python -m manga.humanize hand.jsonl back.jsonl --strip     # the original journal again, byte for byte
+```
+
+The journal patch and live drawing give the same page. A humanized journal holds the hand's points, so replay
+needs no hand, and each stroke keeps its planned points in `humanize_from`, so you can patch it again at another
+strength. To turn it on for every page, put `[humanize] enabled = true` in `settings.local.toml`.
+
+**Strength.** 0 is off and 0.15 is a quiet hand. By 0.3 the whole shape of a line comes from the hand. A line moves
+at most `max_drift_mm` x strength (0.3 mm at 0.15). `person` picks the hand: the same number is the same artist on
+every page.
+
+**Gentle where it matters.** Each part of a drawing gets a share of the strength (`[humanize.parts]`): eyes
+0.25, face 0.5, hair 0.8, body and background 1, speed/focus/flash lines 0.3. It also sets how collected the hand
+is there (`[humanize.interest]`). Parts are named in three ways, and the innermost one wins:
+- `with sh.part('eyes'):` around the code that draws them.
+- `sh.part_map({'eyes': mask, 'hair': mask, 'face': mask})`, by place. Use it for line art traced in one call
+  (`trace.ink_line_art` draws eyes, jaw and hair together). Each stroke belongs to the part most of its points
+  lie in. `examples/expressions_grid` does this.
+- automatically, from `face` helpers (irises, eye whites and closed eyes are `eyes`; brows, mouths and blush are
+  `face`) and from `effects` speed/focus/flash lines (`effects`).
+
+Fineliner and border pens are never moved (`[humanize.pens]`), and neither are straight blunt-ended lines such as
+panel rules (`ruled = 0`). Tone, fills and white-out masks are not strokes, so they stay where they are. At high
+strength, lines can come off the edge of their tone, and outlines traced in many short pieces can split. Keep the default strength for finished pages.
+
 ## Tools
 
 | Module | What it does |

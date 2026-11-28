@@ -47,6 +47,7 @@ def replay(path, scale=1.0, until=None, progress=False, snap=False, on_op=None):
                 sh = Sheet(d['width'], d['height'], d['px_per_mm'], tuple(d['paper']), tuple(d['ink']),
                            seed=d['seed'], scale=scale)
                 sh._replaying = True
+                sh._hum = None                          # the journal holds what the hand drew: no hand again
                 sh.snap_screens = snap
             elif op == 'stroke':
                 sh._n += 1

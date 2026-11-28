@@ -4,9 +4,11 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .settings import configurable
+from .humanize.core import in_part
 
 
 @configurable('effects.focus_lines')
+@in_part('effects')
 def focus_lines(sheet, center, inner, outer_box, count=220, pen='g_pen', pressure=(0.55, 1.0),
                 reach=0.35, bundles=True, seed=0):
     """Concentrated lines (shuchu-sen): strokes from outside toward `center`, stopping around an inner ellipse.
@@ -50,6 +52,7 @@ def focus_lines(sheet, center, inner, outer_box, count=220, pen='g_pen', pressur
 
 
 @configurable('effects.speed_lines')
+@in_part('effects')
 def speed_lines(sheet, box, angle=0.0, count=90, length=(0.3, 0.9), pen='maru', pressure=(0.4, 0.9),
                 fade='both', seed=0):
     """Parallel speed lines (ryusen) inside box (x0, y0, x1, y1). length -- fraction of the box span."""
@@ -76,6 +79,7 @@ def speed_lines(sheet, box, angle=0.0, count=90, length=(0.3, 0.9), pen='maru', 
 
 
 @configurable('effects.flash')
+@in_part('effects')
 def flash(sheet, center, r_in, r_out, count=160, pen='maru', pressure=(0.4, 0.9), seed=0):
     """Beta-flash / uni-flash: thin radial lines between two radii, tapered at both ends."""
     rng = np.random.default_rng(seed)

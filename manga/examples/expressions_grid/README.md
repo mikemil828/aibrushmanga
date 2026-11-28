@@ -7,6 +7,9 @@ A single manga panel drawn from a flat-colour reference sheet: one boy's head ni
     python3 panel.py           # panel.png and page.jsonl
     python3 review.py          # eyes.png, mouths.png; --old prev.png for before-after.png;
                                # DUMP=m.npz python3 panel.py, then --face N --part eyes --masks m.npz
+    python3 -m manga.humanize page.jsonl hand.jsonl && python3 -m manga.replay hand.jsonl --out hand.png
+                               # the same panel drawn by a hand; panel.py names eyes, face and hair with
+                               # sh.part_map, so the eyes get the gentlest hand
 
 `panel.py`'s plan is at the top of the file. It reuses the approach of `../expressions` and the review tools
 in `manga.tools`.
