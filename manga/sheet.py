@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 
 from . import geom
 from .pens import Pen, get as get_pen
+from .settings import configurable
 
 PAPER = (247, 245, 239)
 INK = (18, 17, 20)
@@ -25,6 +26,7 @@ def _poly_mask(poly, W, H, k=1.0):
 
 
 class Sheet:
+    @configurable('sheet')
     def __init__(self, width, height, px_per_mm=8.0, paper=PAPER, ink=INK, journal=None, seed=0, scale=1.0):
         self.W0, self.H0 = int(width), int(height)
         self.k = float(scale)

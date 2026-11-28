@@ -10,6 +10,8 @@ one scratched highlight inside it. That is how screentone is cut and laid by han
 import numpy as np
 from scipy import ndimage as nd
 
+from .settings import configurable
+
 from . import geom
 
 _N8 = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
@@ -105,6 +107,7 @@ def trace(skel):
     return out
 
 
+@configurable('trace.ink_line_art')
 def ink_line_art(sheet, lines, pens=('maru', 'g_pen'), split_mm=0.25, min_len_px=4.0, beta_px=3.0, tol=0.6,
                  seed=0, weight=1.3, min_px=1.3, even=0.0):
     """Draw a line mask (bool, base px) as pen strokes.
@@ -162,6 +165,7 @@ def _stock(v, stock):
     return stock[-1][1]
 
 
+@configurable('trace.area_tones')
 def area_tones(darkness, barrier, stock=STOCK, shade=0.14, light=0.16, min_area=25, blur=1.5):
     """A tone level per pixel built area by area.
 

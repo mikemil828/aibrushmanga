@@ -7,6 +7,8 @@ scale. Classic tones: 50-65 lpi. On a screen-size draft (8 px/mm) 27-42 lpi read
 """
 import numpy as np
 
+from .settings import configurable
+
 _LUT = {}
 
 
@@ -116,8 +118,9 @@ def noise_screen(level, shape, px_per_mm, grain_mm=0.12, seed=0):
     return (r < np.asarray(level, np.float32)).astype(np.float32)
 
 
+@configurable('tone')
 def tone(sheet, mask=None, level=0.3, lpi=42.0, angle=45.0, kind='dot', phase=(0.0, 0.0), mode='ink', seed=0,
-         grain_mm=0.12):
+         grain_mm=0.12, soft_mm=0.0):
     """Lay screentone over `mask` on the sheet.
 
     level -- a number, or an array at base resolution (a gradient or a tone map); a tuple (lo, hi, (x0, y0),
@@ -125,6 +128,8 @@ def tone(sheet, mask=None, level=0.3, lpi=42.0, angle=45.0, kind='dot', phase=(0
     kind  -- 'dot', 'line' or 'noise'. For 'line', angle is the direction the lines step across:
              angle=90 gives horizontal lines (still water), angle=0 vertical ones.
     mode  -- 'ink' lays the tone; 'white' scrapes tone and ink away (tone scratching for highlights).
+    soft_mm -- 0 = a hard edge, cut with a knife. Above 0 the tone fades out toward the mask's edge over this
+             many mm (a soft shadow, like gradation tone).
     """
     lvl_arg = level
     if isinstance(level, tuple) and len(level) == 4:
@@ -136,10 +141,10 @@ def tone(sheet, mask=None, level=0.3, lpi=42.0, angle=45.0, kind='dot', phase=(0
         lvl_arg = float(level)
     sheet._log({'op': 'tone', 'mask': sheet._arg_mask(mask, 'tonemask'), 'level': lvl_arg, 'lpi': lpi,
                 'angle': angle, 'kind': kind, 'phase': list(phase), 'mode': mode, 'seed': seed,
-                'grain_mm': grain_mm})
+                'grain_mm': grain_mm, **({'soft_mm': soft_mm} if soft_mm else {})})
     sheet._n += 1
     sheet.stats['tones'] += 1
-    _tone(sheet, mask, level, lpi, angle, kind, phase, mode, seed, grain_mm)
+    _tone(sheet, mask, level, lpi, angle, kind, phase, mode, seed, grain_mm, soft_mm)
 
 
 def _level_array(sheet, level):
@@ -158,7 +163,7 @@ def _level_array(sheet, level):
     return float(level)
 
 
-def _tone(sheet, mask, level, lpi, angle, kind, phase, mode, seed, grain_mm):
+def _tone(sheet, mask, level, lpi, angle, kind, phase, mode, seed, grain_mm, soft_mm=0.0):
     m = sheet.mask(mask)
     ys, xs = np.nonzero(m > 0.001)
     if len(ys) == 0:
@@ -168,6 +173,8 @@ def _tone(sheet, mask, level, lpi, angle, kind, phase, mode, seed, grain_mm):
     if isinstance(lv, np.ndarray):
         lv = lv[y0:y1, x0:x1]
     shape = (y1 - y0, x1 - x0)
+    if soft_mm and soft_mm > 0:
+        lv = lv * _edge_fade(m[y0:y1, x0:x1], soft_mm * sheet.ppm)
     if kind == 'noise':
         cov = _noise_region(sheet, lv, grain_mm, seed, y0, y1, x0, x1)
     else:
@@ -175,6 +182,15 @@ def _tone(sheet, mask, level, lpi, angle, kind, phase, mode, seed, grain_mm):
                      snap=getattr(sheet, 'snap_screens', False))
     cov = cov * m[y0:y1, x0:x1]
     sheet._put(cov, x0, y0, mode)
+
+
+def _edge_fade(m, soft_px):
+    """0 at the mask's edge rising to 1 at `soft_px` inside it (smoothstep), for soft-edged tone."""
+    from scipy import ndimage as nd
+    inside = np.pad(m > 0.5, 1)
+    d = nd.distance_transform_edt(inside)[1:-1, 1:-1]
+    t = np.clip(d / max(soft_px, 1e-6), 0, 1).astype(np.float32)
+    return t * t * (3 - 2 * t)
 
 
 def _noise_region(sheet, lv, grain_mm, seed, y0, y1, x0, x1):
