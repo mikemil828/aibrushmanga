@@ -107,6 +107,7 @@ def trace(skel):
     return out
 
 
+@configurable('trace.ink_line_art')
 def ink_line_art(sheet, lines, pens=('maru', 'g_pen'), split_mm=0.25, min_len_px=4.0, beta_px=3.0, tol=0.6,
                  seed=0, weight=1.3, min_px=1.3, even=0.0):
     """Draw a line mask (bool, base px) as pen strokes.

@@ -16,15 +16,21 @@ def load(path, width, height):
     return np.asarray(im, np.float32) / 255.0
 
 
+@configurable('prep.darkness')
 def darkness(rgb, blur=1.5, gamma=1.0, lo=0.0, hi=1.0, mode='lightness', mix=0.5):
     """0 = white paper, 1 = black: perceptual lightness inverted, stretched between lo..hi and gamma-shaped.
 
     mode='value' blends in the HSV value (max channel), so saturated colours (a red shirt, red seats) read as
     mid-tones the way an inker sees them, and only real shadows go dark. `mix` = share of value in the blend.
     """
+    return _darkness(rgb, blur, gamma, lo, hi, mode, mix)
+
+
+def _darkness(rgb, blur=1.5, gamma=1.0, lo=0.0, hi=1.0, mode='lightness', mix=0.5):
+    # the engine's own uses call this, so a [prep.darkness] setting only shapes what scripts ask for
     if mode == 'value':
         v = 1.0 - rgb.max(axis=2)
-        dl = darkness(rgb, blur=0, gamma=1.0)
+        dl = _darkness(rgb, blur=0, gamma=1.0)
         d = (1 - mix) * dl + mix * v
         if blur:
             d = nd.gaussian_filter(d, blur)
@@ -104,13 +110,14 @@ def ink_outline(sheet, mask, pen='g_pen', pressure=(0.35, 0.85), light=(-1.0, -1
     return n
 
 
+@configurable('prep.xdog_lines')
 def xdog_lines(rgb, sigma=1.2, k=1.6, p=20.0, eps=-0.02, phi=60.0, tidy=8):
     """Extended difference-of-Gaussians line map (0..1 ink): contour guides for figures and faces.
 
     Use it as a drawing aid (`sheet.apply(lines)` as a pencil-like layer, or threshold and outline it), not as
     the drawing: it finds every edge in the photo, and an inker picks few.
     """
-    g = darkness(rgb, blur=0)
+    g = _darkness(rgb, blur=0)
     g = 1.0 - g
     a = nd.gaussian_filter(g, sigma)
     b = nd.gaussian_filter(g, sigma * k)

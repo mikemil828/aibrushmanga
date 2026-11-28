@@ -26,6 +26,7 @@ from scipy import ndimage as nd
 
 from . import geom
 from .tone import tone
+from .settings import configurable
 
 
 def _frame(inner, outer):
@@ -39,6 +40,7 @@ def _frame(inner, outer):
     return inner, d, t, n
 
 
+@configurable('face.closed_eye')
 def closed_eye(sh, inner, outer, to_page, sag=8.0, thick=(1.0, 4.6), lashes=3, lash_len=10.0, crease=9.0,
                seed=32, widen=4.0):
     """A content closed eye: the lid bows downward like a soft smile from the inner corner to the outer one, a
@@ -171,6 +173,7 @@ def _follow(x0, y0, step, cand, reach, slope, win=3, max_gap=5):
     return out
 
 
+@configurable('face.brow_stroke')
 def brow_stroke(wedge, cand=None, reach=200, every=3, tail_w=4.0, min_w=1.5, tip_len=9):
     """A reference brow as ONE stroke from thick to thin, never a thick piece plus a separate thin line.
 
@@ -266,6 +269,7 @@ def iris_to_rim(iris, dark, reach=6, inset=2, grow=(0.8, 1.6), min_solid=0.91):
     return enc if enc.sum() > min_solid * np.asarray(hm, bool).sum() else None
 
 
+@configurable('face.eye_white')
 def eye_white(sh, white, lash, depth=7.0, level=0.26, lpi=70):
     """The white of the eye stays paper; the upper lid casts a thin shadow on it. `white` is the white's mask,
     `lash` the lash band above it, `depth` the shadow's height in px. Pass the lash band only, not every dark
@@ -319,6 +323,7 @@ def iris(sh, mask, levels, pupil=None, lights=None, rim=0.6, streaks=7, lpi=60, 
         sh.fill(L, mode='white')
 
 
+@configurable('face.manga_iris')
 def manga_iris(sh, mask, pupil=None, lights=None, solid=0.26, fade=0.66, peak=0.7, pupil_r=0.13, sparkles=3,
                rim=0.65, lpi=60, seed=0):
     """An iris the way a manga inker draws it, not the colour art's cel layers: mostly paper. Black under the
@@ -416,6 +421,7 @@ def open_mouth(sh, inside, tongue=None, teeth=None, tongue_level=0.3, lpi=60, ou
         prep.ink_outline(sh, whole, pen='g_pen', pressure=lip, sigma=1.2, min_len=10, seed=seed + 1)
 
 
+@configurable('face.blush')
 def blush(sh, center, rx, ry, n=7, slant=-62.0, pen='maru', pressure=0.32, length=0.75, seed=0, clip=None,
           soft=False):
     """A blush as manga draws it: `n` short slanted strokes across the cheek inside an ellipse (page px), longest
@@ -449,6 +455,7 @@ def blush(sh, center, rx, ry, n=7, slant=-62.0, pen='maru', pressure=0.32, lengt
         run()
 
 
+@configurable('face.blush_tone')
 def blush_tone(sh, mask, peak=0.24, soft_px=14, lpi=60, keep=None):
     """A deep flush as a graded tone: strongest in the middle of `mask` (page px) and fading to paper over
     `soft_px` at its edge, so the band has no outline. `keep` limits where it may fall (not on eyes or hair)."""

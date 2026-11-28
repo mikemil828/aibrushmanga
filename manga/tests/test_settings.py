@@ -103,3 +103,13 @@ def test_typos_warn():
         settings.override('hatch', spaceing_mm=0.5)
     with pytest.warns(UserWarning, match='unknown section'):
         settings.override('hatchh', spacing_mm=0.5)
+
+
+def test_darkness_setting_shapes_only_what_scripts_ask_for():
+    from manga import prep
+    rgb = np.random.default_rng(0).random((40, 40, 3)).astype(np.float32)
+    lines0 = prep.xdog_lines(rgb)
+    settings.override('prep.darkness', mode='value', gamma=2.0)
+    d = prep.darkness(rgb)
+    assert d.shape == (40, 40)
+    assert np.array_equal(prep.xdog_lines(rgb), lines0), "the engine's own darkness reads stay as they were"

@@ -40,7 +40,9 @@ b4, legal) shrinks the page to the paper; leave it out to print at the page's ow
 ## Your own style settings
 
 Line thickness, hatching, screentone, hard or soft shadow edges, panel borders and paper colour all have defaults
-in `manga/settings.default.toml`. Don't edit that file, since `git pull` replaces it. Instead create
+in `manga/settings.default.toml`. So do line art traced from a reference (overall weight, thinnest line,
+evenness), how much detail becomes line, how colours read as darkness, the tone palette, the eyes (solid black,
+fade, pupil, sparkles, lid shadow), brows, closed eyes, blush, speed/focus/flash lines and lettering. Don't edit that file, since `git pull` replaces it. Instead create
 `manga/settings.local.toml` (git ignores it, so a pull never touches it) and copy in only the lines you want to
 change:
 
