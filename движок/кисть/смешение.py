@@ -152,7 +152,7 @@ def сырая_толщина(х, область):
     всего = None
     for с in х.слои.values():
         h = np.asarray(с.толщина[где], np.float64) * np.asarray(с.влажность[где], np.float64)
-        h = h * (1.0 - _СХВАТ * np.asarray(с.схват[где], np.float64))
+        h = h * (1.0 - _СХВАТ * np.clip(np.asarray(с.схват[где], np.float64), 0.0, 1.0))
         всего = h if всего is None else всего + h
     return 0.0 if всего is None or всего.size == 0 else float(всего.mean())
 
@@ -350,7 +350,7 @@ def _сырое_слоёв(х, область):
     итог = {}
     for и, с in х.слои.items():
         т = np.asarray(с.толщина[где], np.float64)
-        h = т * np.asarray(с.влажность[где], np.float64) * (1.0 - _СХВАТ * np.asarray(с.схват[где], np.float64))
+        h = т * np.asarray(с.влажность[где], np.float64) * (1.0 - _СХВАТ * np.clip(np.asarray(с.схват[где], np.float64), 0.0, 1.0))
         итог[и] = (float(h.mean()) if h.size else 0.0, float(т.mean()) if т.size else 0.0)
     return итог
 
