@@ -191,6 +191,10 @@ for i in range(N):
             BROWALL |= got[2]
 IRIS = np.zeros_like(mass); BAND = IRIS.copy(); LIGHTS = IRIS.copy(); MOUTH = IRIS.copy(); SMALL = IRIS.copy(); TEETH = IRIS.copy()
 
+# the parts of each face by place, for humanize (off unless your settings turn it on; the drawing doesn't change):
+# the hand is gentlest on the eyes, then the face, then the hair
+sh.part_map({'eyes': full(EYEZ & ~hair_t), 'hair': full(hair_t), 'face': full(FACE | BROWZ)})
+
 with sh.clip(PANEL):
     # 1. skin shadow: one light tone
     # the blush fades through shadow-coloured pixels at its edge: no shadow tone round a blush

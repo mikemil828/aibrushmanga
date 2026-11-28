@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw
 from . import geom
 from .pens import Pen, get as get_pen
 from .settings import configurable
+from .humanize import core as _hz
 
 PAPER = (247, 245, 239)
 INK = (18, 17, 20)
@@ -43,12 +44,19 @@ class Sheet:
         self._jdir = None
         self._replaying = False
         self.stats = {'strokes': 0, 'tones': 0, 'fills': 0}
+        self._hum = None
+        self._parts = []
+        self._part_map = None
+        self._maps = 0
         if journal:
             self._journal = open(journal, 'w', encoding='utf-8')
             self._jdir = journal + '.d'
             os.makedirs(self._jdir, exist_ok=True)
             self._log({'op': 'sheet', 'width': self.W0, 'height': self.H0, 'px_per_mm': self.ppm0,
                        'paper': list(self.paper), 'ink': list(self.ink_rgb), 'seed': self.seed})
+        cfg = _hz.config()
+        if cfg['enabled'] and cfg['strength'] > 0:      # [humanize] enabled = true in your settings
+            self.humanize(who='settings')
 
     # ------------------------------------------------------------------ journal
     def _log(self, d):
@@ -128,6 +136,71 @@ class Sheet:
             c = np.minimum(c, o[y0:y1, x0:x1])
         return c
 
+    # ------------------------------------------------------------------ humanize: a hand draws the strokes
+    def humanize(self, on=True, who='code', **settings):
+        """Strokes from here on are drawn by a hand: a slight arc, overshoot or falling short, rocking pressure,
+        corners cut on fluent lines (see manga/humanize). Off by default; `[humanize] enabled = true` in your
+        settings turns it on for every sheet. Keywords override the [humanize] settings for this sheet:
+        strength (0.15; 0 = off), person, seed, max_drift_mm, ruled, parts={'eyes': 0.25, ...},
+        interest={...}, pens={...}. humanize(False) turns it off again. The journal keeps what the hand drew,
+        so replay needs no hand; `python -m manga.humanize` can strip it or redraw it at another strength."""
+        if not on:
+            if self._hum is not None:
+                self._log({'op': _hz.OP, 'off': True})
+            self._hum = None
+            return None
+        cfg = _hz.config(**settings)
+        if cfg['strength'] <= 0:
+            return self.humanize(False)
+        seed = self.seed if cfg['seed'] is None else cfg['seed']
+        self._hum = _hz.Humanizer(cfg, seed, self.ppm0)
+        for name in self._parts:
+            self._hum.parts.append(name)
+        if self._part_map is not None:
+            self._hum.set_map(*self._part_map)
+        self._log(_hz.header(cfg, seed, who))
+        return self._hum
+
+    @contextmanager
+    def part(self, name):
+        """Name the part of the drawing the block draws ('eyes', 'face', 'hair', 'body', 'background', 'effects' or
+        your own). Humanize uses it to be gentle where it matters ([humanize.parts] in the settings); the
+        drawing itself doesn't change. Parts nest: the innermost one counts."""
+        self._log({'op': 'part', 'name': str(name)})
+        self._parts.append(str(name))
+        if self._hum is not None:
+            self._hum.enter(str(name))
+        try:
+            yield self
+        finally:
+            self._parts.pop()
+            if self._hum is not None:
+                self._hum.leave()
+            self._log({'op': 'unpart'})
+
+    def part_map(self, masks):
+        """Name the parts of the drawing by place: {'eyes': mask, 'hair': mask, 'face': mask, ...} (base-px boolean
+        masks; where they overlap, the first one listed wins). A stroke outside any `part()` block belongs to the
+        part most of its points lie in. For line art traced in one go (eyes, jaw and hair in one call), so
+        humanize can still be gentle on the eyes. The drawing itself doesn't change. part_map({}) clears it."""
+        names = [str(n) for n in masks]
+        lab = np.zeros((self.H0, self.W0), np.uint8)
+        for i in range(len(names) - 1, -1, -1):
+            m = np.asarray(masks[names[i]], bool)
+            if m.shape != lab.shape:
+                raise ValueError(f'part_map: mask {names[i]!r} is {m.shape}, the sheet is {lab.shape}')
+            lab[m] = i + 1
+        self._part_map = (names, lab) if names else None
+        if self._journal and not self._replaying:
+            fname = None
+            if names:
+                fname = f'{self._n:06d}_parts{self._maps}.png'
+                Image.fromarray(lab).save(os.path.join(self._jdir, fname))
+            self._maps += 1
+            self._log({'op': 'part_map', 'names': names, 'file': fname})
+        if self._hum is not None:
+            self._hum.set_map(names, lab)
+
     # ------------------------------------------------------------------ compositing
     def _put(self, cov, x0, y0, mode):
         H, W = cov.shape
@@ -164,6 +237,11 @@ class Sheet:
             seed = (self.seed * 1000003 + self._n * 7919) & 0x7fffffff
         rec = {'op': 'stroke', 'points': np.round(P, 2).tolist(), 'pen': pen.to_dict(), 'pressure': pressure,
                'seed': int(seed), 'mode': mode, 'taper': list(taper) if taper else None, 'smooth': smooth}
+        if self._hum is not None and not self._replaying:
+            drawn = self._hum.apply(rec)
+            if drawn is not None:
+                rec = drawn
+                P, smooth = np.asarray(rec['points'], float), False
         self._log(rec)
         self._n += 1
         self.stats['strokes'] += 1

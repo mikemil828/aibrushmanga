@@ -94,6 +94,38 @@ taper_out_mm = 1.5
 wobble_mm = 0.02
 
 
+
+# ---------------------------------------------------------------- humanize: a hand draws the lines (manga/humanize)
+
+[humanize]                # OFF by default: with it off every page is exactly what it was
+enabled = false           # true = every sheet's strokes are drawn by a hand (or call sh.humanize() on one sheet)
+strength = 0.15           # 0 = off, 0.15 = a quiet hand, 0.3 = the whole shape of a line is the hand's
+person = 1                # which hand: the same number is the same artist on every page (try 2, 3, ...)
+# seed = 7                # this sitting's chance; unset = the sheet's own seed
+max_drift_mm = 2.0        # a line moves at most this x strength from where it was planned (0.3 mm at 0.15)
+ruled = 0.0               # share for straight blunt-ended lines (panel rules): 0 = they stay ruler-straight
+
+[humanize.parts]          # share of the strength per part, named in code with `with sh.part('eyes'):`
+eyes = 0.25               # eyes first: the gentlest hand
+face = 0.5
+hair = 0.8
+body = 1.0
+background = 1.0
+effects = 0.3             # speed, focus and flash lines
+
+[humanize.interest]       # how much the hand cares about a part: 1 = slow and collected, 0 = loose and quick
+eyes = 1.0
+face = 0.85
+hair = 0.65
+body = 0.5
+background = 0.25
+effects = 0.35
+
+[humanize.pens]           # share of the strength per pen (pens not listed: 1)
+fineliner = 0.0           # rulers and templates
+border = 0.0
+marker = 0.5
+
 # ---------------------------------------------------------------- figure outlines: prep.ink_outline()
 
 [prep.ink_outline]
