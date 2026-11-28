@@ -116,5 +116,11 @@ varied length and weight; the underside of the bob and of each side lock sits in
 locks get four strands and a split tip. Body: the sailor collar's back flap over the shoulders with its stripe,
 sleeve seams, armpit and tail folds, collarbones and the modesty panel's edge in the V.
 
-Weak spots: the nose tip still doesn't break the far cheek at a 0.7 turn; small steps where a lock meets the back
-hair's outline ("looking down", "other side"); fringe strokes on the far edge end abruptly. `draw.py` is unchanged.
+Round 5: no ears in ink (the bob hangs over them; they stay in the pencil). The "ears" Michael saw were the back
+hair's hem bulging out under the side locks: the hem now narrows toward its bottom and its front ends tuck under the
+locks, and the bob's outline is left out beside the lower locks (no slivers). Strands run in separate pieces where
+they leave the hair (no stray bridges) and are heavier; the collar flap is outlined all round; the arm's inner edge
+runs down from the armpit.
+
+Weak spots: the nose tip still doesn't break the far cheek at a 0.7 turn; a small step where the bob's outline
+meets a side lock at the temple; fringe strokes on the far edge end abruptly. `draw.py` is unchanged.

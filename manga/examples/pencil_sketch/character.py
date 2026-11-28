@@ -100,8 +100,11 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     # sleeve seams: the armhole drops from the shoulder's edge; folds: a few pulls from the armpits toward
     # the chest and one under the knot (thin, the shirt is secondary)
     for s in (-1, 1):
-        seam = B([(s * 1.5, 2.22, 0.0), (s * 1.42, 2.6, 0.15), (s * 1.48, 3.0, 0.2), (s * 1.62, 3.35, 0.2)])
-        sh.stroke(seam, pen='maru', pressure=0.4, taper=(1.0, 2.0))
+        # the sleeve seam round the shoulder, then the arm's inner edge against the body from the armpit down
+        seam = B([(s * 1.5, 2.22, 0.0), (s * 1.42, 2.5, 0.15), (s * 1.42, 2.78, 0.2)])
+        sh.stroke(seam, pen='maru', pressure=0.4, taper=(1.0, 0.5))
+        arm = B([(s * 1.42, 2.72, 0.2), (s * 1.4, 3.0, 0.2), (s * 1.44, 3.4, 0.2)])
+        sh.stroke(arm, pen='saji', pressure=0.55, taper=(1.5, 0.0))
         for f in ((1.38, 2.95, 1.0, 3.15), (1.4, 3.15, 1.1, 3.3)):
             sh.stroke(B([(s * f[0], f[1], 0.3), (s * (f[0] + f[2]) / 2, (f[1] + f[3]) / 2 - 0.02, 0.4),
                          (s * f[2], f[3], 0.45)]), pen='maru', pressure=0.32, taper=(2.0, 2.0))
@@ -113,7 +116,7 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         m_f = poly_mask(flap[s])
         sh.fill(m_f, mode='white')
         tone(sh, m_f, level=0.48, lpi=60)
-        sh.stroke(flap[s][1:4], pen='saji', pressure=0.6, taper=(0.3, 0.5))
+        sh.stroke(flap[s][1:] + [flap[s][0]], pen='saji', pressure=0.6, taper=(0.3, 0.5))
         # its stripe, parallel to the outer edge
         st = B([(s * 0.98, 2.08, 0.25), (s * 1.12, 1.98, -0.15), (s * 0.9, 1.84, -0.42)])
         sh.stroke(st, pen='white', pressure=0.35, mode='white', taper=(0.5, 0.5))
@@ -153,8 +156,11 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     # the curtain's hem is a ring round the back of the neck, so seen from below or above it is a curve
     hem = np.linspace(0, np.pi, 13)
     # (a squared-off ring: the bob is full at the back corners)
-    curtain3 = [(np.sign(np.cos(a)) * abs(np.cos(a)) ** 0.5, y, -0.2 - 0.68 * np.sin(a) ** 0.5)
-                for a in hem for y in (0.45, 0.95)]
+    # (it narrows toward the hem, so seen from the front it stays inside the side locks rather than bulging out
+    # under them like an ear)
+    curtain3 = [((1.0 if y < 0.5 else 0.88) * np.sign(np.cos(a)) * abs(np.cos(a)) ** 0.5, y,
+                 -0.2 - 0.68 * np.sin(a) ** 0.5) for a in hem for y in (0.45, 0.95)
+                if y < 0.5 or 0.2 < a < np.pi - 0.2]       # the hem's front ends tuck under the side locks
 
     def lock3(s):
         """A side lock: hangs from the temple past the cheek to a point by the jaw (s = side, -1 or 1)."""
@@ -172,7 +178,28 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     back_m = poly_mask(back)
     sh.fill(back_m, mode='white')
     tone(sh, back_m, level=0.24, lpi=60)
-    sh.stroke(back + back[:1], pen='g_pen', pressure=0.8, taper=(0, 0))
+    # its outline, except beside the lower part of the near locks (they ink their own edge there; the bob's
+    # outline beside them would only leave slivers poking out past it)
+    from scipy.ndimage import binary_dilation
+    near_l = np.zeros((H, W), bool)
+    for s in front_locks:
+        near_l |= poly_mask(_hull(P(lock3(s)))) & (np.arange(H)[:, None] > P([s * 0.9, 0.6, 0.2])[1])
+    near_l = binary_dilation(near_l, iterations=4)
+    BB = back + back[:1]
+    run = []
+    for a, b in zip(BB, BB[1:]):
+        n = max(int(np.hypot(b[0] - a[0], b[1] - a[1]) / 3), 1)
+        for t in np.linspace(0, 1, n, endpoint=False):
+            x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+            if near_l[int(np.clip(y, 0, H - 1)), int(np.clip(x, 0, W - 1))]:
+                if len(run) > 1:
+                    sh.stroke(run, pen='g_pen', pressure=0.8, taper=(0, 0))
+                run = []
+            else:
+                run.append((x, y))
+    run.append(BB[-1])
+    if len(run) > 1:
+        sh.stroke(run, pen='g_pen', pressure=0.8, taper=(0, 0))
     # strands: meridians of the hair from near the crown down to the hem, kept where the surface faces us
     # (the face and front hair are laid over the rest); their lengths vary so they read as clumps, not combing
     rng = np.random.default_rng(seed + 17)
@@ -188,10 +215,20 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         ys = np.linspace(y0, y1, 14)
         pts3 = [hair_pt(lon + 0.12 * (y - y0), y) for y in ys]
         vis = [F(q * np.array([1, 0.3, 1]) / np.linalg.norm(q * np.array([1, 0.3, 1]))) > 0.05 for q in pts3]
-        run = [tuple(P(q)) for q, v in zip(pts3, vis) if v]
-        run = [p for p in run if back_m[int(np.clip(p[1], 0, H - 1)), int(np.clip(p[0], 0, W - 1))]]
-        if len(run) > 3:
-            sh.stroke(run, pen='maru', pressure=rng.uniform(0.45, 0.6), taper=(3.0, 2.0))
+        # split where it leaves the hair or turns away (joining across a gap would draw a stray bridge)
+        runs, run = [], []
+        for q, v in zip(pts3, vis):
+            p2 = tuple(P(q))
+            if v and back_m[int(np.clip(p2[1], 0, H - 1)), int(np.clip(p2[0], 0, W - 1))]:
+                run.append(p2)
+            else:
+                runs.append(run)
+                run = []
+        runs.append(run)
+        pr = rng.uniform(0.6, 0.78)
+        for run in runs:
+            if len(run) > 3:
+                sh.stroke(run, pen='maru', pressure=pr, taper=(3.0, 2.0))
     # the underside of the bob is in shadow: a darker tone below a jagged line round the head (clump tips of
     # the shadow pointing up), so the hanging part has weight
     zig = [hair_pt(lon, 0.42 + (0.12 if k % 2 else 0.0) + 0.04 * rng.uniform())
@@ -244,7 +281,7 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     openings, irises = {}, {}
     eyes_m = np.zeros((H, W), bool)
     # the far eye of a turned head goes behind the cheek: nothing of an eye is drawn past the face's outline
-    from scipy.ndimage import binary_erosion, binary_dilation
+    from scipy.ndimage import binary_erosion
     in_face = binary_erosion(face_m, iterations=2)
 
     def inside(pts):
@@ -328,9 +365,7 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     if len(lip) > 1:
         sh.stroke(lip, pen='maru', pressure=0.35)
     for e, s in (('l', -1), ('r', 1)):
-        es = h['ear_shape_' + e]
-        if es is not None and F(np.array([s, 0, 0])) > 0.15:
-            sh.stroke(es, pen='g_pen', pressure=0.55)
+        # no ears: the bob hangs over them (they stay in the pencil construction)
         cheek = on_face([(s * 0.5, sk.HEAD['eye'] + 0.42)])
         if cheek:
             near = (s == side_near) or abs(turn) < 0.05
