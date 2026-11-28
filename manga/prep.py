@@ -8,6 +8,7 @@ from scipy import ndimage as nd
 from PIL import Image
 
 from . import geom
+from .settings import configurable
 
 
 def load(path, width, height):
@@ -52,6 +53,7 @@ def smooth_mask(mask, sigma=1.5):
     return nd.gaussian_filter(np.asarray(mask, np.float32), sigma)
 
 
+@configurable('prep.ink_outline')
 def ink_outline(sheet, mask, pen='g_pen', pressure=(0.35, 0.85), light=(-1.0, -1.0), sigma=2.0, tol=1.2,
                 min_len=10.0, max_seg_mm=40.0, seed=0, holes=True, mode='ink'):
     """Ink the outline of a shape (bool mask, base px) with weight that follows the light.

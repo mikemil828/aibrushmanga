@@ -3,6 +3,8 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from .settings import configurable
+
 
 def focus_lines(sheet, center, inner, outer_box, count=220, pen='g_pen', pressure=(0.55, 1.0),
                 reach=0.35, bundles=True, seed=0):
@@ -86,6 +88,7 @@ def flash(sheet, center, r_in, r_out, count=160, pen='maru', pressure=(0.4, 0.9)
     return count
 
 
+@configurable('effects.layout')
 def layout(width, height, rows, margin_mm=10.0, gutter_mm=(3.0, 6.0), px_per_mm=8.0, slant=None):
     """Panel rectangles for a page. rows -- list of (height_weight, [width_weights...]).
 
@@ -124,6 +127,7 @@ def layout(width, height, rows, margin_mm=10.0, gutter_mm=(3.0, 6.0), px_per_mm=
     return out
 
 
+@configurable('effects.border')
 def border(sheet, poly, width_mm=0.8):
     """Ruled panel border: a crisp closed outline of constant width, square corners (drawn 4x and downsampled)."""
     sheet._log({'op': 'border', 'poly': [[float(x), float(y)] for x, y in poly], 'width_mm': width_mm})
@@ -210,6 +214,7 @@ def caption(sheet, xy, text, size_mm=3.6, pad_mm=1.6, box=True, bold=True, face=
     return (xy[0], xy[1], xy[0] + bw / k, xy[1] + bh / k)
 
 
+@configurable('effects.halo')
 def halo(sheet, figure, width_px=None, width_mm=1.2):
     """A white gap round a figure (kuchinuki), as published pages cut a figure off from a patterned or toned
     background: paper `width` wide just outside the figure's mask. Lay the background first, then the halo, then

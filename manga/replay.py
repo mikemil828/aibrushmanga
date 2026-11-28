@@ -65,7 +65,8 @@ def replay(path, scale=1.0, until=None, progress=False, snap=False, on_op=None):
                 if isinstance(lv, dict) and 'file' in lv:
                     lv = _load_array(jdir, lv['file'])
                 _tone_fn(sh, _mask(jdir, d['mask']), lv, d['lpi'], d['angle'], d['kind'],
-                                tuple(d['phase']), d['mode'], d['seed'], d.get('grain_mm', 0.12))
+                                tuple(d['phase']), d['mode'], d['seed'], d.get('grain_mm', 0.12),
+                         d.get('soft_mm', 0.0))
             elif op == 'clip':
                 sh._n += 1
                 cm = sh.mask(_mask(jdir, d['mask']))

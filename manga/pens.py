@@ -53,6 +53,10 @@ PENS = {
 }
 
 
+# the engine's own pens; PENS is rebuilt from these plus your settings ([lines], [pens.*] in settings TOML)
+BUILTIN_PENS = dict(PENS)
+
+
 def get(pen):
     if isinstance(pen, Pen):
         return pen

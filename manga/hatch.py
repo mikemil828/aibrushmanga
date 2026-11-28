@@ -6,6 +6,8 @@ cross direction only where it must get darker, then a third.
 """
 import numpy as np
 
+from .settings import configurable
+
 
 def _sample(a, x, y):
     H, W = a.shape
@@ -15,6 +17,7 @@ def _sample(a, x, y):
     return np.where(inside, a[yi, xi], 0.0)
 
 
+@configurable('hatch')
 def hatch(sheet, tone, mask=None, pen='maru', angle=45.0, spacing_mm=0.7,
           layers=((0.2, 0.0), (0.45, 90.0), (0.7, 45.0)),
           pressure=(0.25, 0.85), stroke_mm=(5.0, 11.0), min_mm=1.2, jitter=0.12, angle_jitter=1.2,

@@ -37,6 +37,36 @@ screen to a whole-pixel cell with a fixed threshold order, so all dots come out 
 screen has dots of slowly drifting shape, which a laser printer shows as a woven pattern. `--fit` (letter, a4,
 b4, legal) shrinks the page to the paper; leave it out to print at the page's own size.
 
+## Your own style settings
+
+Line thickness, hatching, screentone, hard or soft shadow edges, panel borders and paper colour all have defaults
+in `manga/settings.default.toml`. Don't edit that file, since `git pull` replaces it. Instead create
+`manga/settings.local.toml` (git ignores it, so a pull never touches it) and copy in only the lines you want to
+change:
+
+```toml
+[lines]
+width_scale = 1.3      # every pen 30 % heavier
+
+[pens.g_pen]
+max_mm = 1.1           # or change one pen
+
+[hatch]
+spacing_mm = 0.5       # denser hatching
+layers = [[0.2, 0.0], [0.5, 90.0]]   # two directions at most
+
+[tone]
+soft_mm = 2.0          # soft shadows: tone fades out over 2 mm at its edge (0 = hard, knife-cut edges)
+```
+
+`python -m manga` lists the settings in effect and the files they came from. To keep several styles, put each in
+its own file and pick one with `MANGA_SETTINGS=styles/noir.toml`, with `--settings styles/noir.toml` on any
+script that imports manga, or with `manga.settings.use('styles/noir.toml')` in code. Files are laid on in that
+order: defaults, local file, the environment variable, the flag, then code. Settings are only defaults, so a value
+passed in a call (`hatch(..., spacing_mm=0.7)`) always wins. Journals store the values a page was drawn with, so
+`manga.replay` redraws an old page exactly, whatever your settings are now. A misspelt name prints a warning.
+`[tone] soft_mm` applies to every tone; for soft shadows only, pass `soft_mm=` in the shadow's own `tone()` call.
+
 ## Tools
 
 | Module | What it does |
@@ -54,6 +84,7 @@ b4, legal) shrinks the page to the paper; leave it out to print at the page's ow
 | `tools` | Working aids: `gridcrop` (a reference crop with a labelled grid, for reading coordinates), `fragment` (draw one part on a clipped sheet in seconds), `compare` (drawn area beside the reference), `pin` (the page round a review comment pinned at x%, y%, beside the same area of the reference), `cut_parts` (what a panel edge or cut takes off a figure: a sawn-off finger shows up as a small loss from a big piece). `layers` (reference, drawing and masks side by side), `before_after` (a review round on one sheet), `strip` (one part of every figure in a grid), `probe` (colour and classes along a line), `keep` (save a script's masks when `DUMP` is set). |
 | `face` | The parts an expression is made of: `brow` (a tapered solid shape; `ribbon_of` measures one from a mask), `iris` (cel layers, rim, streaks, pupil, catch-lights), `eye_white` (the lid's shadow), `open_mouth` (black inside, toned tongue with a darker core, paper teeth with shaded corners, one lip line), `blush` (slanted hatching), `blush_tone` (a graded tone that fades out at its edge), `gloom` (vertical line tone for dread), `sweat`, `closed_eye`, `closed_smile`. See `examples/expressions`. |
 | `replay` | `python -m manga.replay journal.jsonl --scale S --out file.png [--bw] [--until N]`, or `--dpi 600 [--fit letter] --bw` for a printer |
+| `settings` | `python -m manga` shows the style settings in effect; see "Your own style settings" above. `tone(..., soft_mm=2)` gives one tone a soft edge |
 | `animate` | `python -m manga.animate journal.jsonl --out drawing.mp4 [--gif drawing.gif] [--seconds 20]`: a film of the page being drawn, replayed from its journal in drawing order. Needs ffmpeg. |
 
 ## Workflow that has worked
