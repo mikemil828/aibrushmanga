@@ -122,11 +122,17 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     shell3 = [(HAIR_R * np.cos(p) * np.cos(t), HAIR_R * np.sin(p), HAIR_R * np.cos(p) * np.sin(t))
               for t in th for p in ph]
     shell3 = [q for q in shell3 if q[1] < 0.45]                    # the bob ends round the jaw, not below
-    curtain3 = [(s * x, y, z) for s in (-1, 1) for x in (0.75, 1.0) for y in (0.45, 0.95) for z in (-0.85, -0.2)]
+    # the curtain's hem is a ring round the back of the neck, so seen from below or above it is a curve
+    hem = np.linspace(0, np.pi, 13)
+    # (a squared-off ring: the bob is full at the back corners)
+    curtain3 = [(np.sign(np.cos(a)) * abs(np.cos(a)) ** 0.5, y, -0.2 - 0.68 * np.sin(a) ** 0.5)
+                for a in hem for y in (0.45, 0.95)]
 
     def lock3(s):
         """A side lock: hangs from the temple past the cheek to a point by the jaw (s = side, -1 or 1)."""
-        return [(s * 0.74, -0.45, 0.5), (s * 0.68, 0.2, 0.42), (s * 0.68, 0.75, 0.32), (s * 0.82, 1.36, 0.12),
+        # its front edge bows forward over the cheekbone, so in profile it is a curve, not a ruler line
+        return [(s * 0.74, -0.45, 0.3), (s * 0.68, 0.2, 0.36), (s * 0.68, 0.6, 0.36), (s * 0.72, 1.0, 0.26),
+                (s * 0.82, 1.36, 0.08),
                 (s * 1.14, 0.5, 0.05), (s * 1.1, -0.4, 0.25), (s * 1.06, 0.95, -0.25), (s * 1.0, 1.1, -0.5),
                 (s * 1.06, 0.05, -0.45)]
     front_locks = [s for s in (-1, 1) if F(np.array([s, 0.0, 0.25])) > -0.25]
@@ -149,9 +155,9 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     # ---------------------------------------------------------------- face: paper over the back hair
     jaw = h['jaw']
     # the face: its outline closed over the forehead below the hairline (the fringe covers that edge)
-    brow_top = [tuple(q) for q, x in zip(P([_shell(x, -0.42, 1.0) for x in np.linspace(0.85, -0.85, 15)]),
-                                         np.linspace(0.85, -0.85, 15))
-                if F(np.array(_shell(x, -0.42, 1.0))) > 0]
+    # (the hairline comes down at the temples, so a turned head shows no bare forehead behind the side lock)
+    hl = [(x, -0.42 + 0.32 * (x / 0.85) ** 2) for x in np.linspace(0.85, -0.85, 15)]
+    brow_top = [tuple(P([_shell(x, y, 1.0)])[0]) for x, y in hl if F(np.array(_shell(x, y, 1.0))) > 0]
     face_m = poly_mask(jaw + brow_top)
     sh.fill(face_m, mode='white')
     ci = int(np.argmax([p[1] for p in jaw]))
@@ -192,9 +198,13 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         band_m = poly_mask(band_o + band_i[::-1])
         # she looks at the viewer: the iris sits where the eyeball faces us (its centre on the page), on the
         # lower lid; its width follows the opening's foreshortening
+        # turned past three-quarter, the eyes follow the head instead (a profile looking at us is a squint):
+        # the iris moves toward the eyeball's front pole
         bc, rb = h['eye_ball_' + e]
         irx, iry = 0.62 * rx, 0.95 * ry
-        icx = float(np.clip(bc[0], U[:, 0].min() + irx * 0.8, U[:, 0].max() - irx * 0.8)) \
+        follow = float(np.clip((abs(turn) - 0.45) / 0.45, 0, 1))
+        gx = bc[0] + turn * rb * follow
+        icx = float(np.clip(gx, U[:, 0].min() + irx * 0.8, U[:, 0].max() - irx * 0.8)) \
             if U[:, 0].max() - U[:, 0].min() > 2 * irx else float(np.mean(U[:, 0]))
         srt = Lo[np.argsort(Lo[:, 0])]
         ic = (icx, float(np.interp(icx, srt[:, 0], srt[:, 1])) - 0.88 * iry)
@@ -254,6 +264,7 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         L = _hull(P(lock3(s)))
         # the lock rises to the crown over the temple; above its middle it stays inside the hair's outline
         mid_y = P([s * 0.9, 0.4, 0.2])[1]
+        brow_y = P([s * 0.75, sk.HEAD['brow'], 0.3])[1]
         m = poly_mask(L) & (back_m | (np.arange(H)[:, None] > mid_y))
         hair_front |= m
         sh.fill(m, mode='white')
@@ -272,18 +283,21 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
                 xi, yi = int(np.clip(x, 0, W - 1)), int(np.clip(y, 0, H - 1))
                 near_m = m[max(yi - 3, 0):yi + 4, max(xi - 3, 0):xi + 4].any()
                 win = inner[max(yi - 6, 0):yi + 7, max(xi - 6, 0):xi + 7]
-                ok = near_m and not win.all() and (y > mid_y - 0.5 * R or face_m[yi, xi])
+                ok = near_m and not win.all() and y > brow_y
                 if ok:
                     run.append((x, y))
-                if (not ok or t == 1) and len(run) > 1:
+                if (not ok or t == 1) and len(run) > 1 and np.hypot(*np.subtract(run[-1], run[0])) > 0.06 * R:
                     sh.stroke(run, pen='g_pen', pressure=0.6, taper=(0, 0))
                 if not ok:
                     run = []
         # two strands down the lock
-        a, b = P([s * 0.8, -0.1, 0.62]), P([s * 0.84, 1.15, 0.3])
-        a2, b2 = P([s * 0.98, 0.0, 0.45]), P([s * 0.92, 1.1, 0.1])
+        a, b = P([s * 0.78, -0.1, 0.3]), P([s * 0.82, 1.15, 0.12])
+        a2, b2 = P([s * 0.98, 0.0, 0.15]), P([s * 0.95, 1.1, -0.1])
         for p, q in ((a, b), (a2, b2)):
-            sh.stroke([tuple(p), _lerp(p, q, 0.5), tuple(q)], pen='maru', pressure=0.38, taper=(3.0, 3.0))
+            pts = [_lerp(p, q, t) for t in np.linspace(0, 1, 12)]
+            pts = [pt for pt in pts if m[int(np.clip(pt[1], 0, H - 1)), int(np.clip(pt[0], 0, W - 1))]]
+            if len(pts) > 2:
+                sh.stroke(pts, pen='maru', pressure=0.38, taper=(3.0, 3.0))
     # fringe: from the parting over the forehead to clump tips, notched between them; clumps on the far side
     # of a turned head drop out where the forehead turns away
     part3 = _shell(*PART)

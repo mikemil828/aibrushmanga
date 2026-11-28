@@ -102,6 +102,12 @@ top on the iris, a denser tone and a larger pupil, with the gradient still showi
 lids, neck and sailor collar turning half as far as the head. `angles.py` draws six poses (facing, three-quarter,
 profile, looking down, looking up, the other side) into `angles.png` and `angles-sketch.png`.
 
-Weak spots: the profile side lock is a flat slab and the profile eye is small; the far cheek in "other side" is
-nearly straight; fringe strokes on the far edge of a turned head end abruptly; the back hair is flat-bottomed when
-she looks up; a small lock-edge stub is left on the far temple in "other side". `draw.py` (the bust) is unchanged.
+Round 2: the side lock's front edge sits further back and bows over the cheekbone (the profile shows its face,
+not a slab); past three-quarter the irises follow the head instead of looking at us; the hairline comes down at the
+temples; the back hair's hem is a squared ring, so it curves seen from below and the bob flares at the back corners;
+lock edges are inked only below the brow, and stubs shorter than 0.06R are dropped.
+
+Weak spots: the far cheek at a 0.7 turn is still nearly straight (the nose tip doesn't break it yet; that's in
+`sketch.head`); the profile eye's lash wedge sits a little apart from the lid; small steps where a lock meets the
+back hair's outline ("looking down", "other side"); fringe strokes on the far edge end abruptly. `draw.py` is
+unchanged.
