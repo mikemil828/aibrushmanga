@@ -2,7 +2,7 @@
 
 draw.py places her hair, neck and collar by hand for one pose. Here every part is built in 3D in head units
 (x across, y down, z toward the viewer, cranium radius 1) on the construction sketch.head returns, and
-projected with the head's own turn, tilt and nod; the body turns half as far as the head. Layers, back to
+projected with the head's own turn, tilt and nod; the body turns half as far as the head (body=). Layers, back to
 front: shoulders and collar, neck, back hair (the bob behind the face), face, features, the locks on the
 side facing us, the fringe. Each layer is filled with paper over the ones behind, so nothing needs clipping.
 
@@ -46,7 +46,7 @@ def _hull(pts):
     return lo[:-1] + up[:-1]
 
 
-def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
+def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True, body=0.5):
     W, H = sh.W0, sh.H0
 
     def poly_mask(pts):
@@ -67,7 +67,7 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     side_near = -1 if turn > 0 else 1          # which side of her head (x sign) faces us when turned
 
     # ---------------------------------------------------------------- body (turns half as far as the head)
-    by = yaw * 0.5
+    by = yaw * body                             # body: how far the body follows the head's turn
     cb, sb = np.cos(by), np.sin(by)
 
     def B(pts3):
@@ -84,19 +84,49 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     nw = 0.4 * R
     neck_l = [tuple(top - ax_n * nw), tuple(np.add(base, -ax_n * nw * 1.12))]
     neck_r = [tuple(top + ax_n * nw), tuple(np.add(base, ax_n * nw * 1.12))]
-    # shoulders: from the neck's sides (the trapezius rises into it) out and down to the arms
-    sh_pts = {}
-    for s in (-1, 1):
-        sh_pts[s] = B([(s * 0.44, 1.72, -0.05), (s * 0.95, 2.02, -0.05), (s * 1.55, 2.25, -0.05),
-                       (s * 2.0, 2.7, -0.05), (s * 2.25, 3.3, -0.05)])
+    # the torso: horizontal cross-sections (rounded boxes) from the neck's base down past the arms, so it has
+    # a back. Its outline is wherever the stacked sections stand out on the page, which turns with the body
+    # (half-width and half-depth by height, through smooth curves: the trapezius slopes from the neck, the
+    # shoulders round over into the arms)
+    from scipy.interpolate import PchipInterpolator
+    SEC = [(1.7, 0.42, 0.36), (1.85, 0.6, 0.42), (2.0, 0.92, 0.5), (2.15, 1.25, 0.55), (2.35, 1.55, 0.58),
+           (2.7, 1.82, 0.6), (3.2, 1.95, 0.62), (3.6, 1.97, 0.62)]
+    RX = PchipInterpolator([q[0] for q in SEC], [q[1] for q in SEC], extrapolate=True)
+    RZ = PchipInterpolator([q[0] for q in SEC], [q[2] for q in SEC], extrapolate=True)
+    TP = 0.8                                     # how boxy the sections are (1 = ellipse)
+
+    def torso(th, y):
+        rx, rz = float(RX(y)), float(RZ(y))
+        sn, cs = np.sin(th), np.cos(th)
+        x = rx * np.sign(sn) * np.abs(sn) ** TP
+        z = rz * np.sign(cs) * np.abs(cs) ** TP - 0.05
+        return np.array([x, y, z]), np.array([x / rx ** 2, 0.0, (z + 0.05) / rz ** 2])
+
+    def faces(nrm):                               # the body's own turn
+        return -sb * nrm[0] + cb * nrm[2] > 0
+
+    ring = np.linspace(-np.pi, np.pi, 49)
+    body_m = np.zeros((H, W), bool)
+    ys_t = np.linspace(SEC[0][0], SEC[-1][0], 30)
+    for y0, y1 in zip(ys_t, ys_t[1:]):
+        pts = [torso(t, y)[0] for y in (y0, y1) for t in ring]
+        body_m |= poly_mask(_hull(B(pts)))
+
+    def outline(m):
+        """The left and right outline of a mask, row by row, from its top down."""
+        rows = np.nonzero(m.any(axis=1))[0]
+        el, er = [], []
+        for yy in range(rows.min(), rows.max() + 1, 4):
+            xs = np.nonzero(m[yy])[0]
+            if len(xs):
+                el.append((float(xs[0]), float(yy)))
+                er.append((float(xs[-1]), float(yy)))
+        return {-1: el, 1: er}
     V = B([0.0, 2.85, 0.5])[0]
     lapel = {}
     for s in (-1, 1):
         lapel[s] = B([(s * 0.42, 1.95, 0.22), (s * 1.0, 2.15, 0.3), (s * 0.55, 2.9, 0.45), (0.0, 2.85, 0.5)])
-    body_m = poly_mask(sh_pts[-1][::-1] + sh_pts[1] + [(sh_pts[1][-1][0], H), (sh_pts[-1][-1][0], H)])
     sh.fill(body_m, mode='white')
-    for s in (-1, 1):
-        sh.stroke(sh_pts[s], pen='saji', pressure=0.7, taper=(0.5, 0.0))
     # sleeve seams: the armhole drops from the shoulder's edge; folds: a few pulls from the armpits toward
     # the chest and one under the knot (thin, the shirt is secondary)
     for s in (-1, 1):
@@ -111,41 +141,77 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     # the sailor collar's back flap: from the lapel's corner it lies over the top of the shoulder, curves round
     # behind the neck and hangs down the back. Behind the body it is hidden: only what lies on the shoulder
     # (in front) or stands clear of the body's outline shows
-    def ink_runs(pts, ok, **kw):
-        pts = [np.asarray(p, float) for p in pts]
-        run = []
-        for a, b in zip(pts, pts[1:]):
-            n = max(int(np.hypot(*(b - a)) / 3), 1)
-            for t in np.linspace(0, 1, n, endpoint=False):
-                q = a + (b - a) * t
-                if ok[int(np.clip(q[1], 0, H - 1)), int(np.clip(q[0], 0, W - 1))]:
-                    run.append(tuple(q))
+    # the flap on the torso's surface, by angle round it (0 = front centre) and height: a band over each
+    # shoulder from the lapel round to the back, and the square on the back hanging from it. Only the
+    # surface that faces us is drawn
+    FLAP_W = 1.6                                 # the square's half-width across the back
+
+    def in_flap(th, y):
+        a = abs(th)
+        if a < np.deg2rad(50) or y < 1.72:
+            return False
+        p3, _ = torso(th, y)
+        if a > np.pi / 2 and abs(p3[0]) <= FLAP_W:
+            return y <= 2.6
+        return y <= 2.05
+
+    def cloth(th, y):
+        """A point on the collar: on the torso, lifted off it by the cloth's thickness."""
+        p3, n3 = torso(th, y)
+        return p3 + 0.05 * n3 / max(np.linalg.norm(n3), 1e-6)
+
+    m_f = np.zeros((H, W), bool)
+    dth, dy = np.deg2rad(3), 0.03
+    for th in np.arange(-np.pi, np.pi, dth):
+        for y in np.arange(1.72, 2.62, dy):
+            if not in_flap(th + dth / 2, y + dy / 2):
+                continue
+            _, nrm = torso(th + dth / 2, y + dy / 2)
+            quad = poly_mask(B([cloth(th, y), cloth(th + dth, y), cloth(th + dth, y + dy), cloth(th, y + dy)]))
+            # facing us it shows; turned away it shows only where its thickness stands clear of the back
+            m_f |= quad if faces(nrm) else quad & ~body_m
+    m_f &= ~poly_mask(lapel[-1]) & ~poly_mask(lapel[1])
+    sh.fill(m_f, mode='white')
+    tone(sh, m_f, level=0.48, lpi=60)
+
+    def flap_edge(s, inset=0.0):
+        """The flap's free edge on side s: under the shoulder band, down the square's side, along its bottom."""
+        out = []
+        yb = 2.05 - inset
+        for th in np.linspace(np.deg2rad(80) + inset, np.pi, 60):     # (in front it runs along the shoulder)
+            p3, n3 = torso(s * th, yb)
+            if abs(p3[0]) <= FLAP_W - inset and th > np.pi / 2:
+                break
+            out.append((p3, n3))
+        for y in np.linspace(yb, 2.6 - inset, 12):
+            rx = float(RX(y))
+            th = np.pi - np.arcsin(min(((FLAP_W - inset) / rx) ** (1 / TP), 1.0))
+            out.append(torso(s * th, y))
+        th_c = np.pi - np.arcsin(min(((FLAP_W - inset) / float(RX(2.6 - inset))) ** (1 / TP), 1.0))
+        for th in np.linspace(th_c, np.pi, 10):
+            out.append(torso(s * th, 2.6 - inset))
+        return out
+
+    from scipy.ndimage import binary_erosion as _ero
+    m_in = _ero(m_f, iterations=2)                  # the stripe stays on the cloth
+    for s in (-1, 1):
+        for inset, kw in ((0.0, dict(pen='saji', pressure=0.6, taper=(0.3, 0.3))),
+                          (0.06, dict(pen='white', pressure=0.35, mode='white', taper=(0.5, 0.5)))):
+            run = []
+            for p3, n3 in flap_edge(s, inset) + [(None, None)]:
+                q2 = None if p3 is None else B(p3 + 0.05 * n3 / max(np.linalg.norm(n3), 1e-6))[0]
+                clear = q2 is not None and not body_m[int(np.clip(q2[1], 0, H - 1)), int(np.clip(q2[0], 0, W - 1))]
+                inside = q2 is not None and m_in[int(np.clip(q2[1], 0, H - 1)), int(np.clip(q2[0], 0, W - 1))]
+                if p3 is not None and (faces(n3) or clear) and (inset == 0 or inside):
+                    run.append(tuple(q2))
                 else:
                     if len(run) > 1:
                         sh.stroke(run, **kw)
                     run = []
-        if len(run) > 1:
-            sh.stroke(run, **kw)
-
-    flap = {}
+    # the body's outline, collar included (where the cloth's thickness stands past the back it is the outline)
+    sh_pts = outline(body_m | m_f)
     for s in (-1, 1):
-        # (on the shoulder its edge runs along the shoulder's top line, then over it and down the back)
-        on_sh = [(s * 0.42, 1.95, 0.22), (s * 1.0, 2.15, 0.3), (s * 1.0, 2.05, 0.0), (s * 0.7, 1.9, -0.3),
-                 (s * 0.42, 1.8, -0.42)]
-        outer = [(s * 1.0, 2.15, 0.3), (s * 1.0, 2.05, 0.0), (s * 0.95, 2.08, -0.3), (s * 0.75, 2.35, -0.6),
-                 (s * 0.0, 2.45, -0.62)]
-        flap[s] = B([on_sh[0]] + outer + [(0.0, 1.78, -0.5)])
-        vis = poly_mask(B(on_sh)) | ~body_m
-        m_f = (poly_mask(flap[s]) & ~body_m) | poly_mask(B(on_sh))
-        sh.fill(m_f, mode='white')
-        tone(sh, m_f, level=0.48, lpi=60)
-        from scipy.ndimage import binary_dilation as _dil
-        ink_runs(B(outer), _dil(vis, iterations=3), pen='saji', pressure=0.6, taper=(0.3, 0.5))
-        sh.stroke(B(on_sh[1:]), pen='saji', pressure=0.6, taper=(0.3, 1.0))      # its edge along the shoulder
-        # its stripe, parallel to the outer edge
-        st = B([(s * 0.95, 2.1, 0.25), (s * 0.94, 2.03, 0.0), (s * 0.88, 2.06, -0.3), (s * 0.68, 2.3, -0.56),
-                (0.0, 2.37, -0.58)])
-        ink_runs(st, m_f, pen='white', pressure=0.35, mode='white', taper=(0.5, 0.5))
+        sh.stroke(sh_pts[s], pen='saji', pressure=0.7, taper=(0.5, 0.0))
     # the bare V between the lapels: collarbones, and the modesty panel's edge across it
     for s in (-1, 1):
         sh.stroke(B([(s * 0.12, 2.12, 0.42), (s * 0.3, 2.07, 0.38), (s * 0.48, 2.1, 0.3)]), pen='maru',
