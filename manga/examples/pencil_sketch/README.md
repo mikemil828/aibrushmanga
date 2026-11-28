@@ -111,5 +111,10 @@ Round 3: nothing of an eye is drawn past the face's outline (the far eye of a tu
 Michael's pinned note on "other side"); the eyes show through the fringe, so a lid half under a bang no longer
 leaves its flick afloat; `sketch.CHEEKBONE` swells the far outline just below the eye for turns 0.3 to 0.95.
 
+Round 4 (more detail): hair strands follow the bob's meridians (over the cranium, then hanging straight) with
+varied length and weight; the underside of the bob and of each side lock sits in a darker tone under a jagged edge;
+locks get four strands and a split tip. Body: the sailor collar's back flap over the shoulders with its stripe,
+sleeve seams, armpit and tail folds, collarbones and the modesty panel's edge in the V.
+
 Weak spots: the nose tip still doesn't break the far cheek at a 0.7 turn; small steps where a lock meets the back
 hair's outline ("looking down", "other side"); fringe strokes on the far edge end abruptly. `draw.py` is unchanged.

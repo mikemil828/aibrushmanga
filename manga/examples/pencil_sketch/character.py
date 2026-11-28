@@ -97,6 +97,32 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     sh.fill(body_m, mode='white')
     for s in (-1, 1):
         sh.stroke(sh_pts[s], pen='saji', pressure=0.7, taper=(0.5, 0.0))
+    # sleeve seams: the armhole drops from the shoulder's edge; folds: a few pulls from the armpits toward
+    # the chest and one under the knot (thin, the shirt is secondary)
+    for s in (-1, 1):
+        seam = B([(s * 1.5, 2.22, 0.0), (s * 1.42, 2.6, 0.15), (s * 1.48, 3.0, 0.2), (s * 1.62, 3.35, 0.2)])
+        sh.stroke(seam, pen='maru', pressure=0.4, taper=(1.0, 2.0))
+        for f in ((1.38, 2.95, 1.0, 3.15), (1.4, 3.15, 1.1, 3.3)):
+            sh.stroke(B([(s * f[0], f[1], 0.3), (s * (f[0] + f[2]) / 2, (f[1] + f[3]) / 2 - 0.02, 0.4),
+                         (s * f[2], f[3], 0.45)]), pen='maru', pressure=0.32, taper=(2.0, 2.0))
+    # the sailor collar's back flap: from the lapel's corner over the shoulder and round behind the neck
+    flap = {}
+    for s in (-1, 1):
+        flap[s] = B([(s * 0.42, 1.95, 0.22), (s * 1.0, 2.15, 0.3), (s * 1.22, 2.0, -0.2), (s * 0.95, 1.8, -0.5),
+                     (s * 0.4, 1.72, -0.4)])
+        m_f = poly_mask(flap[s])
+        sh.fill(m_f, mode='white')
+        tone(sh, m_f, level=0.48, lpi=60)
+        sh.stroke(flap[s][1:4], pen='saji', pressure=0.6, taper=(0.3, 0.5))
+        # its stripe, parallel to the outer edge
+        st = B([(s * 0.98, 2.08, 0.25), (s * 1.12, 1.98, -0.15), (s * 0.9, 1.84, -0.42)])
+        sh.stroke(st, pen='white', pressure=0.35, mode='white', taper=(0.5, 0.5))
+    # the bare V between the lapels: collarbones, and the modesty panel's edge across it
+    for s in (-1, 1):
+        sh.stroke(B([(s * 0.12, 2.12, 0.42), (s * 0.3, 2.07, 0.38), (s * 0.48, 2.1, 0.3)]), pen='maru',
+                  pressure=0.3, taper=(2.0, 2.0))
+    dk = B([(-0.3, 2.45, 0.45), (0.0, 2.48, 0.5), (0.3, 2.45, 0.45)])
+    sh.stroke(dk, pen='maru', pressure=0.45, taper=(0.5, 0.5))
     col_m = np.zeros((H, W), bool)
     for s in (-1, 1):
         col_m |= poly_mask(lapel[s])
@@ -113,6 +139,8 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         sh.fill(m_t, mode='white')
         tone(sh, m_t, level=0.48, lpi=60)
         sh.stroke(t + [t[0]], pen='saji', pressure=0.55, taper=(0, 0))
+        # a fold down the tail from the knot
+        sh.stroke(B([(d * 0.06, 2.95, 0.5), (d * 0.12, 3.15, 0.5)]), pen='maru', pressure=0.3, taper=(1.0, 2.0))
     sh.fill(poly_mask(ellipse_pts((V[0], V[1] + 0.01 * R), 0.1 * R, 0.08 * R)))
     # ---------------------------------------------------------------- back hair: the bob behind the face
     # the shell over the cranium plus a curtain hanging behind down to the jaw; the far lock when it is
@@ -145,6 +173,44 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     sh.fill(back_m, mode='white')
     tone(sh, back_m, level=0.24, lpi=60)
     sh.stroke(back + back[:1], pen='g_pen', pressure=0.8, taper=(0, 0))
+    # strands: meridians of the hair from near the crown down to the hem, kept where the surface faces us
+    # (the face and front hair are laid over the rest); their lengths vary so they read as clumps, not combing
+    rng = np.random.default_rng(seed + 17)
+
+    def hair_pt(lon, y):
+        # over the cranium on the shell; below y 0.3 the bob hangs straight down
+        rad = 0.98 * HAIR_R * np.sqrt(1 - (min(y, 0.3) / HAIR_R) ** 2)
+        return np.array([rad * np.sin(lon), y, rad * np.cos(lon)])
+
+    for lon in np.deg2rad(np.arange(-170, 190, 14) + 6):
+        y0 = rng.uniform(-0.75, -0.45)
+        y1 = rng.uniform(0.55, 0.92)
+        ys = np.linspace(y0, y1, 14)
+        pts3 = [hair_pt(lon + 0.12 * (y - y0), y) for y in ys]
+        vis = [F(q * np.array([1, 0.3, 1]) / np.linalg.norm(q * np.array([1, 0.3, 1]))) > 0.05 for q in pts3]
+        run = [tuple(P(q)) for q, v in zip(pts3, vis) if v]
+        run = [p for p in run if back_m[int(np.clip(p[1], 0, H - 1)), int(np.clip(p[0], 0, W - 1))]]
+        if len(run) > 3:
+            sh.stroke(run, pen='maru', pressure=rng.uniform(0.45, 0.6), taper=(3.0, 2.0))
+    # the underside of the bob is in shadow: a darker tone below a jagged line round the head (clump tips of
+    # the shadow pointing up), so the hanging part has weight
+    zig = [hair_pt(lon, 0.42 + (0.12 if k % 2 else 0.0) + 0.04 * rng.uniform())
+           for k, lon in enumerate(np.linspace(-np.pi, np.pi, 41))]
+    under = np.zeros((H, W), bool)
+    for q0, q1 in zip(zig, zig[1:]):
+        quad = [tuple(P(q0)), tuple(P(q1)), tuple(P(q1 * [1, 0, 1] + [0, 1.4, 0])),
+                tuple(P(q0 * [1, 0, 1] + [0, 1.4, 0]))]
+        under |= poly_mask(quad)
+    under &= back_m
+    tone(sh, under, level=0.42, lpi=60)
+    # the hem splits into clumps: short strokes up from its edge
+    for lon in np.deg2rad(np.arange(-150, 160, 25)):
+        q0, q1 = hair_pt(lon, 0.9), hair_pt(lon + 0.05, 0.68)
+        n0 = q0 * np.array([1, 0, 1])
+        if F(n0 / np.linalg.norm(n0)) > 0.05:
+            a2, b2 = P(q0), P(q1)
+            if back_m[int(np.clip(a2[1] - 3, 0, H - 1)), int(np.clip(a2[0], 0, W - 1))]:
+                sh.stroke([tuple(a2), tuple(b2)], pen='maru', pressure=0.45, taper=(0.3, 2.5))
 
     # the neck stands in front of the hair behind it
     neck_m = poly_mask(neck_l + neck_r[::-1])
@@ -281,6 +347,11 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         hair_front |= m
         sh.fill(m, mode='white')
         tone(sh, m, level=0.24, lpi=60)
+        # its lower part in shadow under a jagged edge, like the bob behind
+        zl = [P([s * (0.7 + 0.4 * t), 0.72 + (0.14 if k % 2 else 0.0), 0.35 - 0.8 * t])
+              for k, t in enumerate(np.linspace(0, 1, 9))]
+        lo_m = poly_mask([tuple(p) for p in zl] + [tuple(P([s * 1.1, 1.6, -0.45])), tuple(P([s * 0.7, 1.6, 0.35]))])
+        tone(sh, m & lo_m, level=0.42, lpi=60)
         # its edges, except where they run across the hair behind (the lock's top): only over the face or
         # against the paper
         inner = back_m & ~face_m
@@ -303,9 +374,14 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
                 if not ok:
                     run = []
         # two strands down the lock
-        a, b = P([s * 0.78, -0.1, 0.3]), P([s * 0.82, 1.15, 0.12])
-        a2, b2 = P([s * 0.98, 0.0, 0.15]), P([s * 0.95, 1.1, -0.1])
-        for p, q in ((a, b), (a2, b2)):
+        strands = [(P([s * 0.78, -0.1, 0.3]), P([s * 0.82, 1.15, 0.12])),
+                   (P([s * 0.98, 0.0, 0.15]), P([s * 0.95, 1.1, -0.1])),
+                   (P([s * 0.86, 0.3, 0.26]), P([s * 0.88, 1.25, 0.08])),
+                   (P([s * 1.06, 0.4, 0.0]), P([s * 1.02, 0.98, -0.3]))]
+        # the tip splits: a short line up from the point
+        tip, up_ = P([s * 0.82, 1.36, 0.08]), P([s * 0.8, 1.05, 0.2])
+        strands.append((up_, tip))
+        for p, q in strands:
             pts = [_lerp(p, q, t) for t in np.linspace(0, 1, 12)]
             pts = [pt for pt in pts if m[int(np.clip(pt[1], 0, H - 1)), int(np.clip(pt[0], 0, W - 1))]]
             if len(pts) > 2:
