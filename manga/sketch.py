@@ -67,6 +67,7 @@ JAW = [(0.69, 1.02, 0.02), (0.64, 1.16, 0.2), (0.5, 1.31, 0.4), (0.3, 1.43, 0.58
        (0.0, HEAD['chin'], 0.76)]
 RAMUS = (0.8, 0.8, -0.1)          # the back of the jaw rises from its corner to just under the ear
 EYE_SPAN, EYE_OUT, EYE_SET, EYE_LOW = 65.0, 22.0, 1.1, 0.8  # opening half-width on the ball (deg), outward aim, depth, lower lid
+CHEEKBONE = 0.05     # how far the far cheekbone swells past the limb in a turn (in head radii)
 CHEEK_ROUND = 1.75    # how fully the cheek's cross-section rounds its corner (2 = a quarter ellipse)
 FACE_CURVE = 0.9     # how fast the front of the face falls back toward the sides: z = profile - FACE_CURVE * x^2
 
@@ -346,10 +347,14 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
             # the jaw corner's sudden depth leaves a small knot in the limb: ease it out
             k = np.ones(7) / 7
             ou = np.convolve(np.pad(ou, 3, mode='edge'), k, mode='valid')
+        # the cheekbone: seen turned away, the far outline swells just below the eye and eases in toward the
+        # mouth (manga draws that swell; the smooth limb alone reads as a ruler line from temple to chin)
+        ys_c = contour[:, 1]
+        k_cb = np.clip((abs(turn) - 0.3) / 0.3, 0, 1) * (1 - np.clip((abs(turn) - 0.85) / 0.1, 0, 1))
+        ou = ou + CHEEKBONE * r * k_cb * np.exp(-((ys_c - 0.66) / 0.24) ** 2)
         cheek = c + np.outer(dn, down) + np.outer(ou * s_out, right)
         # from about 30 degrees the tip of the nose breaks the cheek line on its own, a small point: let the
         # profile through there only (lips and chin stay hidden until near profile)
-        ys_c = contour[:, 1]
         nose_tip = (abs(turn) > 0.5) & (ys_c > HEAD['nose'] - 0.12) & (ys_c < HEAD['nose'] + 0.05)
         use_prof = ((prof2 - cheek) @ right * s_out > 0) & (near_profile | nose_tip)
         sides[far] = np.where(use_prof[:, None], prof2, cheek)

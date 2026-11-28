@@ -176,6 +176,13 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
 
     # ---------------------------------------------------------------- eyes (primary)
     openings, irises = {}, {}
+    eyes_m = np.zeros((H, W), bool)
+    # the far eye of a turned head goes behind the cheek: nothing of an eye is drawn past the face's outline
+    from scipy.ndimage import binary_erosion, binary_dilation
+    in_face = binary_erosion(face_m, iterations=2)
+
+    def inside(pts):
+        return [p for p in pts if in_face[int(np.clip(p[1], 0, H - 1)), int(np.clip(p[0], 0, W - 1))]]
     for e, sx in (('l', -1), ('r', 1)):
         if not h['eye_vis_' + e] or h['eye_upper_' + e] is None:
             continue
@@ -191,11 +198,12 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         kc = int(turn_dn[0]) - 1 if len(turn_dn) else n - 1
         w = np.r_[np.linspace(0, 1, kc + 1), np.linspace(1, 0.1, n - kc)[1:]]
         out_dir = np.sign(U[-1, 0] - U[0, 0]) or 1.0
-        opening = poly_mask([tuple(p) for p in U] + [tuple(p) for p in Lo[::-1]])
+        opening = poly_mask([tuple(p) for p in U] + [tuple(p) for p in Lo[::-1]]) & in_face
         openings[e] = opening
+        eyes_m |= opening
         band_o = [(x + out_dir * 0.06 * rx * wi, y - (0.07 + 0.13 * wi) * ry) for (x, y), wi in zip(U, w)]
         band_i = [(x, y + min((0.06 + 0.16 * wi) * ry, 0.45 * (ly - y))) for (x, y), (_, ly), wi in zip(U, Lo, w)]
-        band_m = poly_mask(band_o + band_i[::-1])
+        band_m = poly_mask(band_o + band_i[::-1]) & in_face
         # she looks at the viewer: the iris sits where the eyeball faces us (its centre on the page), on the
         # lower lid; its width follows the opening's foreshortening
         # turned past three-quarter, the eyes follow the head instead (a profile looking at us is a squint):
@@ -219,13 +227,17 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
                             pupil_r=0.16, sparkles=0, rim=0.7, seed=3)
             sh.fill(pupil_m & iris_m & ~lights)
         sh.fill(band_m)
+        eyes_m |= band_m
         oc = band_o[kc]
-        sh.stroke([oc, (oc[0] + out_dir * 0.25 * rx, oc[1] - 0.05 * ry),
-                   (oc[0] + out_dir * 0.42 * rx, oc[1] - 0.22 * ry)], pen='g_pen', pressure=0.85, taper=(0.3, 1.6))
+        flick = [oc, (oc[0] + out_dir * 0.25 * rx, oc[1] - 0.05 * ry), (oc[0] + out_dir * 0.42 * rx, oc[1] - 0.22 * ry)]
+        if len(inside(flick)) == 3:
+            sh.stroke(flick, pen='g_pen', pressure=0.85, taper=(0.3, 1.6))
         k0, k1 = int(0.3 * n), int(0.92 * n)
         if k1 - k0 > 1:
-            sh.stroke([(x, y - 0.32 * ry) for x, y in U[k0:k1]], pen='maru', pressure=0.45)
-        under = [tuple(p) for p in Lo if abs(p[0] - ic[0]) < 0.95 * irx]
+            crease = inside([(x, y - 0.32 * ry) for x, y in U[k0:k1]])
+            if len(crease) > 1:
+                sh.stroke(crease, pen='maru', pressure=0.45)
+        under = inside([tuple(p) for p in Lo if abs(p[0] - ic[0]) < 0.95 * irx])
         if len(under) > 1:
             sh.stroke(under, pen='maru', pressure=0.5, taper=(1.0, 1.0))
         # brow: on the face, thick at its head by the centre line, thin toward the temple
@@ -317,6 +329,8 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     top3 = [_shell(x, -0.6, 1.1) for x in np.linspace(0.85, -0.85, 9)]
     fr_m = poly_mask(list(P(edge3 + top3)))
     fr_m &= poly_mask(back) | face_m
+    # the eyes show through the fringe (the manga convention): a lid half under a bang leaves its flick afloat
+    fr_m &= ~binary_dilation(eyes_m, iterations=2)
     hair_front |= fr_m
     sh.fill(fr_m, mode='white')
     tone(sh, fr_m, level=0.24, lpi=60)
@@ -341,7 +355,6 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     for k, a in enumerate(np.linspace(336, 196, 29)):
         rr = 0.7 if k % 2 == 0 else 0.64
         ring += ellipse_pts((hc[0], hc[1] + 8), hr * rr, hr * (rr - 0.02), a, a, 1)
-    from scipy.ndimage import binary_dilation
     near_locks = binary_dilation(hair_front & ~fr_m, iterations=int(0.12 * R))
     sh.fill(poly_mask(ring) & ((back_m & ~face_m) | fr_m) & ~near_locks, mode='white')     # crown and fringe only
     # flow strands from the parting

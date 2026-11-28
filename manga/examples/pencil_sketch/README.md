@@ -107,7 +107,9 @@ not a slab); past three-quarter the irises follow the head instead of looking at
 temples; the back hair's hem is a squared ring, so it curves seen from below and the bob flares at the back corners;
 lock edges are inked only below the brow, and stubs shorter than 0.06R are dropped.
 
-Weak spots: the far cheek at a 0.7 turn is still nearly straight (the nose tip doesn't break it yet; that's in
-`sketch.head`); the profile eye's lash wedge sits a little apart from the lid; small steps where a lock meets the
-back hair's outline ("looking down", "other side"); fringe strokes on the far edge end abruptly. `draw.py` is
-unchanged.
+Round 3: nothing of an eye is drawn past the face's outline (the far eye of a turned head goes behind the cheek;
+Michael's pinned note on "other side"); the eyes show through the fringe, so a lid half under a bang no longer
+leaves its flick afloat; `sketch.CHEEKBONE` swells the far outline just below the eye for turns 0.3 to 0.95.
+
+Weak spots: the nose tip still doesn't break the far cheek at a 0.7 turn; small steps where a lock meets the back
+hair's outline ("looking down", "other side"); fringe strokes on the far edge end abruptly. `draw.py` is unchanged.
