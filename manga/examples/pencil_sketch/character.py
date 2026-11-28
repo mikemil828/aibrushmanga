@@ -108,18 +108,44 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
         for f in ((1.38, 2.95, 1.0, 3.15), (1.4, 3.15, 1.1, 3.3)):
             sh.stroke(B([(s * f[0], f[1], 0.3), (s * (f[0] + f[2]) / 2, (f[1] + f[3]) / 2 - 0.02, 0.4),
                          (s * f[2], f[3], 0.45)]), pen='maru', pressure=0.32, taper=(2.0, 2.0))
-    # the sailor collar's back flap: from the lapel's corner over the shoulder and round behind the neck
+    # the sailor collar's back flap: from the lapel's corner it lies over the top of the shoulder, curves round
+    # behind the neck and hangs down the back. Behind the body it is hidden: only what lies on the shoulder
+    # (in front) or stands clear of the body's outline shows
+    def ink_runs(pts, ok, **kw):
+        pts = [np.asarray(p, float) for p in pts]
+        run = []
+        for a, b in zip(pts, pts[1:]):
+            n = max(int(np.hypot(*(b - a)) / 3), 1)
+            for t in np.linspace(0, 1, n, endpoint=False):
+                q = a + (b - a) * t
+                if ok[int(np.clip(q[1], 0, H - 1)), int(np.clip(q[0], 0, W - 1))]:
+                    run.append(tuple(q))
+                else:
+                    if len(run) > 1:
+                        sh.stroke(run, **kw)
+                    run = []
+        if len(run) > 1:
+            sh.stroke(run, **kw)
+
     flap = {}
     for s in (-1, 1):
-        flap[s] = B([(s * 0.42, 1.95, 0.22), (s * 1.0, 2.15, 0.3), (s * 1.22, 2.0, -0.2), (s * 0.95, 1.8, -0.5),
-                     (s * 0.4, 1.72, -0.4)])
-        m_f = poly_mask(flap[s])
+        # (on the shoulder its edge runs along the shoulder's top line, then over it and down the back)
+        on_sh = [(s * 0.42, 1.95, 0.22), (s * 1.0, 2.15, 0.3), (s * 1.0, 2.05, 0.0), (s * 0.7, 1.9, -0.3),
+                 (s * 0.42, 1.8, -0.42)]
+        outer = [(s * 1.0, 2.15, 0.3), (s * 1.0, 2.05, 0.0), (s * 0.95, 2.08, -0.3), (s * 0.75, 2.35, -0.6),
+                 (s * 0.0, 2.45, -0.62)]
+        flap[s] = B([on_sh[0]] + outer + [(0.0, 1.78, -0.5)])
+        vis = poly_mask(B(on_sh)) | ~body_m
+        m_f = (poly_mask(flap[s]) & ~body_m) | poly_mask(B(on_sh))
         sh.fill(m_f, mode='white')
         tone(sh, m_f, level=0.48, lpi=60)
-        sh.stroke(flap[s][1:] + [flap[s][0]], pen='saji', pressure=0.6, taper=(0.3, 0.5))
+        from scipy.ndimage import binary_dilation as _dil
+        ink_runs(B(outer), _dil(vis, iterations=3), pen='saji', pressure=0.6, taper=(0.3, 0.5))
+        sh.stroke(B(on_sh[1:]), pen='saji', pressure=0.6, taper=(0.3, 1.0))      # its edge along the shoulder
         # its stripe, parallel to the outer edge
-        st = B([(s * 0.98, 2.08, 0.25), (s * 1.12, 1.98, -0.15), (s * 0.9, 1.84, -0.42)])
-        sh.stroke(st, pen='white', pressure=0.35, mode='white', taper=(0.5, 0.5))
+        st = B([(s * 0.95, 2.1, 0.25), (s * 0.94, 2.03, 0.0), (s * 0.88, 2.06, -0.3), (s * 0.68, 2.3, -0.56),
+                (0.0, 2.37, -0.58)])
+        ink_runs(st, m_f, pen='white', pressure=0.35, mode='white', taper=(0.5, 0.5))
     # the bare V between the lapels: collarbones, and the modesty panel's edge across it
     for s in (-1, 1):
         sh.stroke(B([(s * 0.12, 2.12, 0.42), (s * 0.3, 2.07, 0.38), (s * 0.48, 2.1, 0.3)]), pen='maru',
@@ -187,17 +213,13 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     near_l = binary_dilation(near_l, iterations=4)
     BB = back + back[:1]
     run = []
-    for a, b in zip(BB, BB[1:]):
-        n = max(int(np.hypot(b[0] - a[0], b[1] - a[1]) / 3), 1)
-        for t in np.linspace(0, 1, n, endpoint=False):
-            x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
-            if near_l[int(np.clip(y, 0, H - 1)), int(np.clip(x, 0, W - 1))]:
-                if len(run) > 1:
-                    sh.stroke(run, pen='g_pen', pressure=0.8, taper=(0, 0))
-                run = []
-            else:
-                run.append((x, y))
-    run.append(BB[-1])
+    for q in BB:
+        if near_l[int(np.clip(q[1], 0, H - 1)), int(np.clip(q[0], 0, W - 1))]:
+            if len(run) > 1:
+                sh.stroke(run, pen='g_pen', pressure=0.8, taper=(0, 0))
+            run = []
+        else:
+            run.append(q)
     if len(run) > 1:
         sh.stroke(run, pen='g_pen', pressure=0.8, taper=(0, 0))
     # strands: meridians of the hair from near the crown down to the hem, kept where the surface faces us
