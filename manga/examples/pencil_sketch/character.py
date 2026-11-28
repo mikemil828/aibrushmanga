@@ -89,8 +89,8 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True, 
     # (half-width and half-depth by height, through smooth curves: the trapezius slopes from the neck, the
     # shoulders round over into the arms)
     from scipy.interpolate import PchipInterpolator
-    SEC = [(1.7, 0.42, 0.36), (1.85, 0.6, 0.42), (2.0, 0.92, 0.5), (2.15, 1.25, 0.55), (2.35, 1.55, 0.58),
-           (2.7, 1.82, 0.6), (3.2, 1.95, 0.62), (3.6, 1.97, 0.62)]
+    SEC = [(1.7, 0.42, 0.36), (1.85, 0.6, 0.42), (2.0, 0.9, 0.5), (2.15, 1.2, 0.55), (2.3, 1.45, 0.58),
+           (2.5, 1.66, 0.6), (2.8, 1.82, 0.6), (3.2, 1.9, 0.62), (3.6, 1.92, 0.62)]
     RX = PchipInterpolator([q[0] for q in SEC], [q[1] for q in SEC], extrapolate=True)
     RZ = PchipInterpolator([q[0] for q in SEC], [q[2] for q in SEC], extrapolate=True)
     TP = 0.8                                     # how boxy the sections are (1 = ellipse)
@@ -194,15 +194,22 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True, 
 
     from scipy.ndimage import binary_erosion as _ero
     m_in = _ero(m_f, iterations=2)                  # the stripe stays on the cloth
+    from scipy.ndimage import binary_dilation as _dil2
+    m_near = _dil2(m_f, iterations=3)
+    body_deep = _ero(body_m, iterations=4)          # well inside the body's outline (behind it, hidden)
     for s in (-1, 1):
         for inset, kw in ((0.0, dict(pen='saji', pressure=0.6, taper=(0.3, 0.3))),
                           (0.06, dict(pen='white', pressure=0.35, mode='white', taper=(0.5, 0.5)))):
             run = []
             for p3, n3 in flap_edge(s, inset) + [(None, None)]:
                 q2 = None if p3 is None else B(p3 + 0.05 * n3 / max(np.linalg.norm(n3), 1e-6))[0]
-                clear = q2 is not None and not body_m[int(np.clip(q2[1], 0, H - 1)), int(np.clip(q2[0], 0, W - 1))]
+                # drawn where it borders the visible cloth (a tolerance band, so it doesn't flicker on and off
+                # where the edge passes over the body's outline)
+                near = q2 is not None and m_near[int(np.clip(q2[1], 0, H - 1)), int(np.clip(q2[0], 0, W - 1))]
                 inside = q2 is not None and m_in[int(np.clip(q2[1], 0, H - 1)), int(np.clip(q2[0], 0, W - 1))]
-                if p3 is not None and (faces(n3) or clear) and (inset == 0 or inside):
+                deep = q2 is not None and body_deep[int(np.clip(q2[1], 0, H - 1)), int(np.clip(q2[0], 0, W - 1))]
+                seen = p3 is not None and (faces(n3) or not deep)
+                if seen and (inside if inset else near):
                     run.append(tuple(q2))
                 else:
                     if len(run) > 1:
@@ -211,7 +218,12 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True, 
     # the body's outline, collar included (where the cloth's thickness stands past the back it is the outline)
     sh_pts = outline(body_m | m_f)
     for s in (-1, 1):
-        sh.stroke(sh_pts[s], pen='saji', pressure=0.7, taper=(0.5, 0.0))
+        # eased (the row scan steps and the collar's corners leave small knots)
+        q = np.array(sh_pts[s])
+        if len(q) > 7:
+            k = np.ones(5) / 5
+            q[:, 0] = np.convolve(np.pad(q[:, 0], 2, mode='edge'), k, mode='valid')
+        sh.stroke([tuple(p) for p in q], pen='saji', pressure=0.7, taper=(0.5, 0.0))
     # the bare V between the lapels: collarbones, and the modesty panel's edge across it
     for s in (-1, 1):
         sh.stroke(B([(s * 0.12, 2.12, 0.42), (s * 0.3, 2.07, 0.38), (s * 0.48, 2.1, 0.3)]), pen='maru',
