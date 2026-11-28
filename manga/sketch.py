@@ -132,7 +132,9 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
     chin wherever that stands out past the cheek), 'ear_l', 'ear_r' (centres, None when hidden), 'ear_shape_l',
     'ear_shape_r' (outlines), 'side_l', 'side_r' (side-plane discs, None when facing away), 'centre' (centre
     line polyline), 'profile' (the centre line below the brow), 'hairline', 'cranium' (c, r), 'far' (+1 when
-    the far side is the viewer's right) and 'lines' (brow, eye, nose and mouth lines across the face).
+    the far side is the viewer's right), 'lines' (brow, eye, nose and mouth lines across the face),
+    'eye_ball_l/r' ((centre, radius) on the page), and 'project' / 'facing': the head's own projection of
+    head-unit 3D points, and a test of whether normals face the viewer, for building hair and features on it.
     """
     c = np.asarray(c, float)
     yaw = np.arcsin(np.clip(turn, -1.0, 1.0))
@@ -279,6 +281,7 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         for name, q in (('upper', U2), ('lower', L2)):
             out['eye_%s_%s' % (name, e)] = [tuple(v) for v in q] if vis and len(q) > 1 else None
         out['brow_' + e] = tuple(P(x, HEAD['brow'])[0])
+        out['eye_ball_' + e] = (tuple(proj(ball)[0]), re * r)     # eyeball centre and radius on the page
     for k in ('nose', 'mouth', 'chin'):
         out[k] = tuple(P(0.0, HEAD[k])[0])
     out['hairline'] = across(HEAD['hairline'], 0.62)
@@ -351,6 +354,10 @@ def head(sh, c, r, turn=0.0, tilt=0.0, nod=0.0, pressure=0.35, draw=True, seed=N
         use_prof = ((prof2 - cheek) @ right * s_out > 0) & (near_profile | nose_tip)
         sides[far] = np.where(use_prof[:, None], prof2, cheek)
     out['jaw'] = [tuple(p) for p in sides['l']] + [tuple(p) for p in sides['r'][::-1]]
+    # the head's own projection, for building more on it (hair, features) in head units: x across, y down,
+    # z toward the viewer, cranium radius 1; and whether a surface normal faces the viewer
+    out['project'] = lambda pts3: proj(np.asarray(pts3, float))[0]
+    out['facing'] = lambda n: facing(np.asarray(n, float))
     if draw:
         rng = _rng(sh, seed)
         s = lambda: int(rng.integers(1 << 30))

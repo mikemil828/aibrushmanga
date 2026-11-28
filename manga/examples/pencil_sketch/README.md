@@ -94,3 +94,14 @@ top on the iris, a denser tone and a larger pupil, with the gradient still showi
   style choice.
 - Where a lid meets the eyeball's edge on a near-profile eye there is a slight kink.
 - No hairline or neck in the construction itself; the neck is still placed by the example.
+
+## Angles sheet (`angles.py`, `character.py`)
+
+`character.py` draws the bust's girl at any turn, tilt and nod on the same `sketch.head()` construction: hair as
+3D point sets (back hair, side locks, fringe clumps) projected and layered in painter's order, eyes inked from the
+lids, neck and sailor collar turning half as far as the head. `angles.py` draws six poses (facing, three-quarter,
+profile, looking down, looking up, the other side) into `angles.png` and `angles-sketch.png`.
+
+Weak spots: the profile side lock is a flat slab and the profile eye is small; the far cheek in "other side" is
+nearly straight; fringe strokes on the far edge of a turned head end abruptly; the back hair is flat-bottomed when
+she looks up; a small lock-edge stub is left on the far temple in "other side". `draw.py` (the bust) is unchanged.
