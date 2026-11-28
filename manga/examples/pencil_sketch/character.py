@@ -352,7 +352,9 @@ def draw_character(sh, c, R, turn=0.3, tilt=-5.0, nod=0.0, seed=1, pencil=True):
     # ---------------------------------------------------------------- nose, mouth, ear, blush
     if abs(turn) < 0.85:
         ny = sk.HEAD['nose']
-        nose = on_face([(0.04, ny - 0.06), (0.08, ny + 0.02), (0.02, ny + 0.04)])
+        # the tip's hook points the way the face turns (facing us it keeps its usual side)
+        nd = -1.0 if turn < -0.02 else 1.0
+        nose = on_face([(nd * 0.04, ny - 0.06), (nd * 0.08, ny + 0.02), (nd * 0.02, ny + 0.04)])
         if len(nose) > 1:
             sh.stroke(nose, pen='maru', pressure=0.55, taper=(0.6, 0.4))
     my = sk.HEAD['mouth']
